@@ -1,13 +1,13 @@
 """spec §2.4의 Oracle DB 전제를 실행 가능한 검사로 바꾼다. 읽기 전용이다.
 
-유일한 예외는 DB8(타임스탬프 바인드 왕복) — 이것도 `SELECT ... FROM dual`로만
-확인하며, 테이블을 만들거나 쓰지 않는다.
+유일한 예외는 DB8(타임스탬프 바인드 왕복)이며, 이것도 dual 한 줄짜리 조회로만
+확인하고 테이블을 만들거나 쓰지 않는다.
 
-주의: 이 모듈의 SQL 문자열은 정적 게이트(tests/static/test_sql_references.py의
-SCANNED_PACKAGES = ["jira_dashboard.db.repository", "jira_dashboard.pipeline"])의
-스캔 대상이 아니다 — doctor는 두 패키지 어디에도 속하지 않는다. 그래서 여기 SQL의
-테이블/컬럼 참조는 정적 게이트가 아니라 아래 테스트(tests/unit/test_doctor_db.py)와
-DB7의 런타임 스키마 대조로만 검증된다.
+이 모듈은 정적 SQL 게이트(SCANNED_PACKAGES)에 포함된다. DB7의 스키마 대조 질의처럼
+TEST_ 테이블/컬럼을 참조하는 부분은 그 게이트가 검증하지만, DB1~DB6과 DB8은 Oracle
+딕셔너리 뷰/의사테이블(버전, 파라미터, 권한, 타임존, dual)만 참조하고 애플리케이션
+테이블은 전혀 언급하지 않으므로 그 게이트가 봐도 걸러낼 게 없다 — 그쪽은 여전히
+fake-cursor 단위 테스트로만 검증된다.
 """
 from dataclasses import dataclass
 from datetime import datetime, timezone

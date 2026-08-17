@@ -7,7 +7,8 @@ import pytest
 
 from jira_dashboard.db import schema_map
 
-SCANNED_PACKAGES = ["jira_dashboard.db.repository", "jira_dashboard.pipeline"]
+SCANNED_PACKAGES = ["jira_dashboard.db.repository", "jira_dashboard.pipeline",
+                   "jira_dashboard.doctor"]
 _TABLE_TOKEN = re.compile(r"\b(TEST_\w+)\b", re.IGNORECASE)
 _BIND = re.compile(r":(\w+)")
 # SQL로 볼 최소 신호

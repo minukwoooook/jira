@@ -35,7 +35,11 @@ class HttpJiraClient:
         token = os.environ.get(secret_ref)
         if not token:
             raise JiraAuthError(f"environment variable {secret_ref} is not set")
-        return cls(base_url, token, auth_type=auth_type)
+        client = cls(base_url, token, auth_type=auth_type)
+        # doctor의 A12가 자격증명 실패를 진단할 때 어떤 env var를 점검할지 알려주기
+        # 위한 것뿐이다 — 토큰 자체는 여기 저장하지 않는다.
+        client.secret_ref = secret_ref
+        return client
 
     def _request(self, method: str, path: str, **kw):
         for attempt in range(1, MAX_ATTEMPTS + 1):

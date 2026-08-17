@@ -74,10 +74,11 @@ def test_a3_warns_plainly_when_no_project_issue_exceeds_the_limit(fake_jira):
     assert r.verdict != "PASS"
 
 
-def test_a3_fails_when_second_call_reveals_nothing_new(fake_jira, monkeypatch):
-    """서버가 매번 같은 첫 N건만 주는 상황(실제 DC 10.3이 이럴 가능성) — 이 경우
-    changelog 100건 초과 이슈는 이 클라이언트로 절대 완전히 못 가져오므로 FAIL이어야
-    한다."""
+def test_a3_warns_when_second_call_reveals_nothing_new(fake_jira, monkeypatch):
+    """서버가 매번 같은 첫 N건만 주는 상황 — 조사 결과(docs/api-verification.md A3)가
+    예상한 바로 그 결과이고, 파이프라인은 이미 no-progress 가드 +
+    changelog_truncated 카운터로 이를 처리하도록 설계돼 있다. 아무것도 고장나지
+    않았으므로 FAIL이 아니라 WARN이어야 한다."""
     original = fake_jira.get_issue_changelog
 
     def _always_first_window(issue_key, start_at):
@@ -85,7 +86,98 @@ def test_a3_fails_when_second_call_reveals_nothing_new(fake_jira, monkeypatch):
 
     monkeypatch.setattr(fake_jira, "get_issue_changelog", _always_first_window)
     r = _by_id(run_jira_checks(fake_jira, "PROJ"))["A3"]
+    assert r.verdict == "WARN"
+
+
+# --- Fix round 1, item 3: A1은 "startAt=0이 행을 돌려주는지"가 아니라 "startAt이
+# 실제로 다음 페이지로 전진하는지"를 봐야 한다. -------------------------------
+
+def test_a1_warns_when_probe_project_fits_in_one_page(fake_jira):
+    """synthetic fixture는 8개 이슈뿐이라 한 페이지(100)에 다 들어간다 — 페이징
+    자체는 실측되지 않았으므로 PASS가 아니라 WARN이어야 한다."""
+    r = _by_id(run_jira_checks(fake_jira, "PROJ"))["A1"]
+    assert r.verdict == "WARN"
+
+
+def test_a1_passes_when_second_page_is_disjoint_from_first(fixture_dir):
+    from jira_dashboard.jira.fake import FakeJiraClient
+
+    client = FakeJiraClient(fixture_dir, server_max_results=3)
+    r = _by_id(run_jira_checks(client, "PROJ"))["A1"]
+    assert r.verdict == "PASS"
+    assert "disjoint=True" in r.observed
+
+
+def test_a1_fails_when_server_ignores_start_at(fixture_dir, monkeypatch):
+    """startAt을 무시하고 매번 같은 첫 페이지를 주는 서버를 흉내낸다 — 두 번째
+    페이지가 첫 페이지와 완전히 겹치므로 FAIL이어야 한다."""
+    from jira_dashboard.jira.fake import FakeJiraClient
+
+    client = FakeJiraClient(fixture_dir, server_max_results=3)
+    original = client.search_issues
+
+    def _ignore_start_at(jql, start_at, max_results, expand_changelog):
+        return original(jql, 0, max_results, expand_changelog)
+
+    monkeypatch.setattr(client, "search_issues", _ignore_start_at)
+    r = _by_id(run_jira_checks(client, "PROJ"))["A1"]
     assert r.verdict == "FAIL"
+
+
+# --- Fix round 1, item 2: A10은 관측된 게 없으면 PASS를 주면 안 된다. ---------
+
+def test_a10_warns_when_no_issue_has_a_reporter(fake_jira):
+    """synthetic fixture의 어떤 이슈도 reporter를 채우지 않는다 — 관측 자체가
+    없으므로 WARN이어야 한다 (예전 로직은 이걸 PASS로 잘못 판정했다)."""
+    r = _by_id(run_jira_checks(fake_jira, "PROJ"))["A10"]
+    assert r.verdict == "WARN"
+
+
+def test_a10_passes_when_a_key_shaped_reporter_is_observed(fake_jira):
+    some_issue = next(iter(fake_jira._issues.values()))
+    some_issue["fields"]["reporter"] = {
+        "key": "jdoe", "name": "jdoe", "displayName": "Jane Doe",
+    }
+    r = _by_id(run_jira_checks(fake_jira, "PROJ"))["A10"]
+    assert r.verdict == "PASS"
+
+
+def test_a10_warns_when_observed_reporter_looks_like_cloud_account_id(fake_jira):
+    for issue in fake_jira._issues.values():
+        issue["fields"]["reporter"] = {"accountId": "abc123"}
+    r = _by_id(run_jira_checks(fake_jira, "PROJ"))["A10"]
+    assert r.verdict == "WARN"
+
+
+# --- Fix round 1, item 4: A12은 실패할 수 있어야 무언가를 증명한 것이다. --------
+
+def test_a12_fails_and_short_circuits_when_credentials_are_rejected():
+    """자격증명이 거부되면 A1~A11은 같은 이유로 전부 실패할 것이므로 실행을
+    생략해야 한다 — 결과 목록에는 A12 FAIL 하나만 있어야 한다."""
+    from jira_dashboard.jira.protocol import JiraAuthError
+
+    class _RejectsCredentials:
+        secret_ref = "JIRA_TEST_TOKEN"
+
+        def get_fields(self):
+            raise JiraAuthError("HTTP 401 on /rest/api/2/field")
+
+        def get_statuses(self):
+            raise AssertionError("A12 FAIL 이후 나머지 체크가 실행되면 안 된다")
+
+        def get_projects(self):
+            raise AssertionError("A12 FAIL 이후 나머지 체크가 실행되면 안 된다")
+
+        def search_issues(self, *a, **k):
+            raise AssertionError("A12 FAIL 이후 나머지 체크가 실행되면 안 된다")
+
+        def get_issue_changelog(self, *a, **k):
+            raise AssertionError("A12 FAIL 이후 나머지 체크가 실행되면 안 된다")
+
+    results = run_jira_checks(_RejectsCredentials(), "PROJ")
+    assert [r.id for r in results] == ["A12"]
+    assert results[0].verdict == "FAIL"
+    assert "JIRA_TEST_TOKEN" in results[0].impact
 
 
 def test_every_result_carries_impact_text(fake_jira):
