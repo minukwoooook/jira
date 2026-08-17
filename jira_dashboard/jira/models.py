@@ -1,7 +1,7 @@
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 
-SENTINEL = datetime(9999, 12, 31)
+SENTINEL = datetime(9999, 12, 31, tzinfo=timezone.utc)
 MAX_VAL_STR_BYTES = 1000
 MAX_CHANGELOG_STR_BYTES = 4000  # TEST_ISSUE_CHANGELOG.from_str/to_str VARCHAR2(4000 BYTE)
 
