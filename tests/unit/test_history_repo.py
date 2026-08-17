@@ -49,20 +49,31 @@ def test_unknown_field_name_resolves_to_none():
 
 
 class _FakeCursor:
-    def __init__(self, captured):
-        self._captured = captured
+    def __init__(self, captured=None, rows=None):
+        self._captured = captured if captured is not None else {}
+        self._rows = rows if rows is not None else []
+        self.executed_with = None
+
+    def execute(self, sql, **kwargs):
+        self.executed_with = kwargs
+        calls = self._captured.setdefault("execute_calls", [])
+        calls.append((sql, kwargs))
 
     def executemany(self, sql, rows, batcherrors=False):
         self._captured["rows"] = rows
         self._captured["called"] = True
 
+    def fetchall(self):
+        return self._rows
+
 
 class _FakeConn:
-    def __init__(self, captured):
-        self._captured = captured
+    def __init__(self, captured=None, rows=None):
+        self._captured = captured if captured is not None else {}
+        self._rows = rows if rows is not None else []
 
     def cursor(self):
-        return _FakeCursor(self._captured)
+        return _FakeCursor(self._captured, self._rows)
 
 
 def test_upsert_changelog_applies_three_tier_resolution_per_row():
@@ -134,3 +145,114 @@ def test_from_str_and_to_str_are_truncated_to_4000_bytes():
     row = captured["rows"][0]
     assert len(row["from_str"].encode("utf-8")) <= 4000
     assert len(row["to_str"].encode("utf-8")) <= 4000
+
+
+# --- Critical fix 1: Oracle TIMESTAMP columns come back naive; every timestamp in
+# this pipeline is UTC by convention (spec §2.1) and build_intervals compares them
+# against the UTC-aware SENTINEL. Read-path normalization must not be skipped. ---
+
+def test_load_issue_states_normalizes_naive_timestamps_and_maps_columns():
+    naive_created = datetime(2026, 1, 1)  # what oracledb actually returns
+    conn = _FakeConn(rows=[
+        (500, naive_created, "Bug", "완료", "High", "Fixed",
+         "jdoe", "Jane Doe", "asmith", "Alice Smith", "PROJ-1"),
+    ])
+    states = history_repo.load_issue_states(conn, [500])
+    state = states[500]
+
+    assert state["created_at"] == datetime(2026, 1, 1, tzinfo=timezone.utc)
+    assert state["created_at"].tzinfo is not None
+
+    cv = state["current_values"]
+    assert cv["issuetype"] == ("Bug", None)
+    assert cv["status"] == ("완료", None)
+    assert cv["priority"] == ("High", None)
+    assert cv["resolution"] == ("Fixed", None)
+    assert cv["assignee"] == ("Jane Doe", "jdoe")
+    assert cv["reporter"] == ("Alice Smith", "asmith")
+    assert cv["parent"] == ("PROJ-1", None)
+    assert "status_category" not in cv  # merge_categories owns this field exclusively
+
+
+def test_load_changes_normalizes_naive_timestamps_and_maps_columns_positionally():
+    """load_changes가 10개 컬럼을 위치로 언패킹한다 — from_str/to_str이 뒤바뀌면
+    이력의 모든 구간이 거꾸로 뒤집히는데 아무것도 알려주지 않는다."""
+    naive_changed = datetime(2026, 1, 5)  # what oracledb actually returns
+    conn = _FakeConn(rows=[
+        (500, "h1", 0, naive_changed, "status", "status", "1", "To Do", "10", "완료"),
+    ])
+    changes = history_repo.load_changes(conn, [500])
+    item = changes[500][0]
+
+    assert item.changed_at == datetime(2026, 1, 5, tzinfo=timezone.utc)
+    assert item.changed_at.tzinfo is not None
+    assert item.history_id == "h1"
+    assert item.item_seq == 0
+    assert item.field_id == "status"
+    assert item.field_name == "status"
+    assert item.from_id == "1"
+    assert item.from_str == "To Do"
+    assert item.to_id == "10"
+    assert item.to_str == "완료"
+
+
+def test_naive_db_timestamps_do_not_break_build_intervals():
+    """load_issue_states/load_changes가 (수정 전처럼) naive datetime을 그대로
+    돌려주면 build_intervals가 SENTINEL과 `<` 비교에서 TypeError로 죽는다 — 실제
+    changelog가 있는 첫 이슈에서 바로 재현된다. 정규화된 출력이 안전한지 여기서
+    끝까지 확인한다."""
+    from jira_dashboard.pipeline.derive_history import build_intervals
+
+    issue_conn = _FakeConn(rows=[
+        (500, datetime(2026, 1, 1), "Bug", "완료", None, None,
+         None, None, None, None, None),
+    ])
+    state = history_repo.load_issue_states(issue_conn, [500])[500]
+
+    changes_conn = _FakeConn(rows=[
+        (500, "h1", 0, datetime(2026, 1, 5), "status", "status",
+         None, "To Do", None, "완료"),
+    ])
+    changes = history_repo.load_changes(changes_conn, [500])[500]
+
+    out = build_intervals(state["created_at"], state["current_values"],
+                          changes, {"status"})
+    assert out  # 예외 없이 완료됐다는 것 자체가 이 테스트의 요점이다
+
+
+def test_load_current_eav_values_groups_by_issue_and_field_pk():
+    conn = _FakeConn(rows=[
+        (500, 7, "결함", "opt-1"),
+        (500, 8, "라벨A", None),
+        (501, 7, "버그", "opt-2"),
+    ])
+    out = history_repo.load_current_eav_values(conn, [500, 501])
+    assert out[500] == {7: ("결함", "opt-1"), 8: ("라벨A", None)}
+    assert out[501] == {7: ("버그", "opt-2")}
+
+
+# --- Item 4: repository read/write functions each need at least one direct test ---
+
+def test_replace_history_deletes_then_inserts_when_rows_present():
+    captured = {}
+    conn = _FakeConn(captured)
+    rows = [{"issue_id": 500, "field_pk": 1,
+             "valid_from": datetime(2026, 1, 1, tzinfo=timezone.utc),
+             "valid_to": datetime(2026, 1, 5, tzinfo=timezone.utc),
+             "val_str": "To Do", "val_id": None}]
+    history_repo.replace_history(conn, 500, rows)
+
+    kinds = [call[0] for call in captured["execute_calls"]]
+    assert "DELETE FROM test_issue_field_history" in kinds[0]
+    assert captured["execute_calls"][0][1] == {"issue_id": 500}
+    assert captured["rows"] == rows  # executemany captured the insert rows
+
+
+def test_replace_history_still_deletes_when_rows_are_empty():
+    """빈 이슈(변경 이력 없음)라도 예전 구간을 지우는 DELETE는 건너뛰면 안 된다."""
+    captured = {}
+    conn = _FakeConn(captured)
+    history_repo.replace_history(conn, 500, [])
+
+    assert len(captured["execute_calls"]) == 1
+    assert "called" not in captured  # executemany was never reached

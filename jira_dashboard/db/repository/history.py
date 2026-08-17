@@ -1,9 +1,23 @@
 import logging
+from datetime import datetime, timezone
 
 from jira_dashboard.jira.models import MAX_CHANGELOG_STR_BYTES, ChangelogItem
 from jira_dashboard.jira.parser import truncate
 
 log = logging.getLogger(__name__)
+
+
+def _as_utc(dt: datetime | None) -> datetime | None:
+    """Oracle 19c의 plain TIMESTAMP 컬럼은 오프셋 없는(naive) datetime으로 돌아온다.
+
+    이 파이프라인의 모든 타임스탬프는 UTC로 저장된다는 규약이므로(spec §2.1),
+    읽을 때 UTC로 못박는다. 안 하면 build_intervals가 SENTINEL(UTC-aware)과
+    naive datetime을 `<`로 비교하다 TypeError로 죽는다 — changelog가 있는
+    첫 이슈에서 곧바로 재현된다.
+    """
+    if dt is None or dt.tzinfo is not None:
+        return dt
+    return dt.replace(tzinfo=timezone.utc)
 
 _MERGE_CHANGELOG = """
 MERGE INTO test_issue_changelog t
@@ -101,8 +115,17 @@ WHERE  instance_id = :instance_id AND status_name IS NOT NULL
 """
 
 _SELECT_ISSUE_STATES = """
-SELECT issue_id, created_at, status_name FROM test_jira_issue
+SELECT issue_id, created_at, issue_type_name, status_name, priority_name,
+       resolution_name, assignee_user_key, assignee_display_name,
+       reporter_user_key, reporter_display_name, parent_key
+FROM   test_jira_issue
 WHERE  issue_id IN ({placeholders})
+"""
+
+_SELECT_EAV_CURRENT = """
+SELECT issue_id, field_pk, val_str, val_id
+FROM   test_issue_field_value
+WHERE  val_seq = 0 AND issue_id IN ({placeholders})
 """
 
 _SELECT_CHANGES = """
@@ -162,13 +185,54 @@ def status_category_map(conn, instance_id: int) -> dict[str, str]:
 
 
 def load_issue_states(conn, issue_ids: list[int]) -> dict[int, dict]:
+    """고정 컬럼(시스템 필드)의 현재값만 채운다. EAV 커스텀 필드의 현재값은
+    load_current_eav_values가 따로 채운다 — field_pk → field_id 변환에 카탈로그가
+    필요해 이 함수만으로는 끝낼 수 없다 (파이프라인 계층에서 병합, Correction 2).
+
+    status_category는 일부러 채우지 않는다 — 그건 changelog에 실리지 않는 합성
+    필드라, 여기 넣으면 merge_categories가 만드는 status_category 구간과 겹쳐
+    같은 (issue_id, field_pk, valid_from)에 중복/충돌하는 행이 생긴다.
+    """
+    if not issue_ids:
+        return {}
     placeholders, binds = _binds(issue_ids)
     cur = conn.cursor()
     cur.execute(_SELECT_ISSUE_STATES.format(placeholders=placeholders), **binds)
-    return {
-        iid: {"created_at": created, "current_values": {"status": (status, None)}}
-        for iid, created, status in cur.fetchall()
-    }
+    states = {}
+    for (iid, created, issue_type, status, priority, resolution,
+         assignee_key, assignee_name, reporter_key, reporter_name,
+         parent) in cur.fetchall():
+        states[iid] = {
+            "created_at": _as_utc(created),
+            "current_values": {
+                "issuetype": (issue_type, None),
+                "status": (status, None),
+                "priority": (priority, None),
+                "resolution": (resolution, None),
+                "assignee": (assignee_name, assignee_key),
+                "reporter": (reporter_name, reporter_key),
+                "parent": (parent, None),
+            },
+        }
+    return states
+
+
+def load_current_eav_values(conn, issue_ids: list[int]
+                            ) -> dict[int, dict[int, tuple]]:
+    """커스텀(EAV) dimension 필드의 "현재값"을 field_pk 단위로 돌려준다.
+
+    다중값 필드는 val_seq=0인 첫 값만 쓴다 — 진짜 현재 "집합"과 비교하려면 별도
+    조인 의미가 필요한데, 여기서는 그 근사만 제공한다(한계로 기록, task-8-report).
+    """
+    if not issue_ids:
+        return {}
+    placeholders, binds = _binds(issue_ids)
+    cur = conn.cursor()
+    cur.execute(_SELECT_EAV_CURRENT.format(placeholders=placeholders), **binds)
+    out: dict[int, dict[int, tuple]] = {}
+    for iid, field_pk, val_str, val_id in cur.fetchall():
+        out.setdefault(iid, {})[field_pk] = (val_str, val_id)
+    return out
 
 
 def load_changes(conn, issue_ids: list[int]) -> dict[int, list[ChangelogItem]]:
@@ -180,7 +244,7 @@ def load_changes(conn, issue_ids: list[int]) -> dict[int, list[ChangelogItem]]:
          from_id, from_str, to_id, to_str) in cur.fetchall():
         out.setdefault(iid, []).append(ChangelogItem(
             history_id=hid, item_seq=seq, author_user_key=None,
-            author_display_name=None, changed_at=at, field_name=field_name,
+            author_display_name=None, changed_at=_as_utc(at), field_name=field_name,
             field_id=field_id, from_id=from_id, from_str=from_str,
             to_id=to_id, to_str=to_str,
         ))

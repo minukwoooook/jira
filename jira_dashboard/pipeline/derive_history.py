@@ -5,7 +5,9 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from jira_dashboard.db.repository import history as history_repo
-from jira_dashboard.jira.models import MAX_VAL_STR_BYTES, SENTINEL, ChangelogItem
+from jira_dashboard.jira.models import (
+    MAX_VAL_ID_BYTES, MAX_VAL_STR_BYTES, SENTINEL, ChangelogItem,
+)
 from jira_dashboard.jira.parser import truncate
 
 log = logging.getLogger(__name__)
@@ -45,13 +47,18 @@ def build_intervals(
     out: list[Interval] = []
 
     for field_id in fields:
+        # current_values에 키 자체가 없는 경우(아직 현재값을 로드하지 않는 필드)와
+        # 키는 있지만 값이 지워져 None인 경우를 구분해야 한다 — 전자는 "모른다"이지
+        # "불일치"가 아니다. 후자만 이력 종점과 실제로 비교할 자격이 있다.
+        has_current = field_id in current_values
         current_str, current_id = current_values.get(field_id, (None, None))
         items = sorted(by_field.get(field_id, []),
                        key=lambda c: (c.changed_at, c.item_seq))
 
         if not items:
             out.append(Interval(field_id, created_at, SENTINEL,
-                                truncate(current_str, MAX_VAL_STR_BYTES), current_id))
+                                truncate(current_str, MAX_VAL_STR_BYTES),
+                                truncate(current_id, MAX_VAL_ID_BYTES)))
             continue
 
         # (시각, 값, 값id) 경계 목록. 첫 구간의 값은 첫 변경의 from_str이다.
@@ -66,7 +73,9 @@ def build_intervals(
                 boundaries.append((stamp, item.to_str, item.to_id))
 
         # 이력 종점 != 현재값이면 이력이 유실된 것이다. 현재값을 신뢰한다.
-        if boundaries[-1][1] != current_str:
+        # current_values에 아예 없는 필드(아직 현재값을 모델링하지 않는 필드)는
+        # 이 판정에서 제외한다 — 없음을 불일치로 오인해 멀쩡한 이력을 지우면 안 된다.
+        if has_current and boundaries[-1][1] != current_str:
             log.warning(
                 "history endpoint mismatch on %s: history=%r current=%r",
                 field_id, boundaries[-1][1], current_str,
@@ -77,7 +86,8 @@ def build_intervals(
             end = boundaries[idx + 1][0] if idx + 1 < len(boundaries) else SENTINEL
             if start < end:
                 out.append(Interval(field_id, start, end,
-                                    truncate(val_str, MAX_VAL_STR_BYTES), val_id))
+                                    truncate(val_str, MAX_VAL_STR_BYTES),
+                                    truncate(val_id, MAX_VAL_ID_BYTES)))
     return out
 
 
@@ -114,6 +124,29 @@ def _tracked_fields(conn, instance_id: int) -> dict[str, int]:
     return history_repo.dimension_field_pks(conn, instance_id)
 
 
+def _merge_eav_current_values(states: dict[int, dict], conn, chunk: list[int],
+                              field_pks: dict[str, int]) -> None:
+    """EAV로 저장되는 커스텀 dimension 필드의 "현재값"을 states에 채운다.
+
+    load_issue_states는 TEST_JIRA_ISSUE의 고정 컬럼(시스템 필드)만 안다 — 커스텀
+    필드는 TEST_ISSUE_FIELD_VALUE에 field_pk로 저장되므로 여기서 field_pk →
+    field_id로 뒤집어 병합한다. 다중값 필드는 val_seq=0인 첫 값만 "현재값"으로 쓴다
+    (한계: 진짜 여러 값 중 첫 값만 비교 대상이 된다. 대신 Correction의 절반인
+    "current_values에 없는 필드는 불일치로 취급하지 않는다" 가드 덕분에, 이 근사가
+    틀리더라도 최악의 경우 이력 종점이 그 첫 값으로 덮이는 정도지 지워지지는 않는다).
+    """
+    pk_to_field = {pk: fid for fid, pk in field_pks.items()}
+    eav = history_repo.load_current_eav_values(conn, chunk)
+    for issue_id, by_pk in eav.items():
+        state = states.get(issue_id)
+        if state is None:
+            continue
+        for pk, value in by_pk.items():
+            field_id = pk_to_field.get(pk)
+            if field_id:
+                state["current_values"][field_id] = value
+
+
 def derive_history(conn, instance_id: int, issue_ids: list[int],
                    *, category_of: Mapping[str, str] | None = None,
                    batch: int = 1000) -> int:
@@ -124,6 +157,11 @@ def derive_history(conn, instance_id: int, issue_ids: list[int],
     에서 이미 빠진 상태는 여기 없다 — Task 10의 러너는 /rest/api/2/status에서 뽑은,
     인스턴스에 정의된 모든 상태를 담은 맵을 넘겨 이 문제를 피한다.
     """
+    if batch > 1000:
+        # Oracle의 IN 리스트는 표현식 1000개가 상한이다 (ORA-01795). load_issue_states/
+        # load_changes/update_first_done_at이 issue_id IN (...)을 배치 크기 그대로
+        # 쓰므로, 배치를 늘리면 곧바로 그 한도에 걸린다.
+        raise ValueError(f"batch must be <= 1000 (Oracle IN-list limit); got {batch}")
     if not issue_ids:
         return 0
     field_pks = _tracked_fields(conn, instance_id)
@@ -135,6 +173,7 @@ def derive_history(conn, instance_id: int, issue_ids: list[int],
     for start in range(0, len(issue_ids), batch):
         chunk = issue_ids[start:start + batch]
         states = history_repo.load_issue_states(conn, chunk)
+        _merge_eav_current_values(states, conn, chunk, field_pks)
         changes = history_repo.load_changes(conn, chunk)
         for issue_id in chunk:
             state = states.get(issue_id)
@@ -159,6 +198,8 @@ def derive_history(conn, instance_id: int, issue_ids: list[int],
 
 def update_first_done_at(conn, issue_ids: list[int], *, batch: int = 1000) -> int:
     """status_category 구간에서 'done'인 첫 구간의 valid_from. 재오픈 이슈는 MIN 유지."""
+    if batch > 1000:
+        raise ValueError(f"batch must be <= 1000 (Oracle IN-list limit); got {batch}")
     if not issue_ids:
         return 0
     total = 0

@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime, timezone
 
 from jira_dashboard.jira.models import SENTINEL, ChangelogItem
@@ -72,9 +73,33 @@ def test_change_before_created_is_clamped():
 def test_history_endpoint_mismatch_is_overwritten_by_current_value(caplog):
     """이력이 유실된 경우. 현재 시점 값이 틀리는 것이 최악이므로 현재값을 신뢰한다."""
     t = datetime(2026, 1, 5, tzinfo=timezone.utc)
-    out = build_intervals(CREATED, {"status": ("완료", None)},
-                          [_c(t, "To Do", "개발중")], TRACKED)
+    with caplog.at_level(logging.WARNING, logger="jira_dashboard.pipeline.derive_history"):
+        out = build_intervals(CREATED, {"status": ("완료", None)},
+                              [_c(t, "To Do", "개발중")], TRACKED)
     assert out[-1].val_str == "완료"
+    assert any("history endpoint mismatch" in r.message for r in caplog.records)
+
+
+def test_no_warning_when_history_endpoint_matches_current_value(caplog):
+    """실제로 어긋나지 않으면 경고를 남기지 않는다 — 남기면 정상 케이스마다
+    로그가 터진다."""
+    t = datetime(2026, 1, 5, tzinfo=timezone.utc)
+    with caplog.at_level(logging.WARNING, logger="jira_dashboard.pipeline.derive_history"):
+        build_intervals(CREATED, {"status": ("완료", None)},
+                        [_c(t, "To Do", "완료")], TRACKED)
+    assert caplog.records == []
+
+
+def test_field_absent_from_current_values_is_not_flagged_as_mismatch(caplog):
+    """current_values에 그 필드의 키 자체가 없으면(아직 현재값을 모델링하지 않는
+    필드) '불일치'로 오인해선 안 된다 — 없음과 다름은 다르다. 이 경우 changelog의
+    마지막 값을 그대로 신뢰하고, 지우지도 경고하지도 않는다."""
+    t = datetime(2026, 1, 5, tzinfo=timezone.utc)
+    with caplog.at_level(logging.WARNING, logger="jira_dashboard.pipeline.derive_history"):
+        out = build_intervals(CREATED, {}, [_c(t, "To Do", "완료", field_id="duedate")],
+                              {"duedate"})
+    assert out[-1].val_str == "완료"
+    assert caplog.records == []
 
 
 def test_untracked_fields_are_ignored():
@@ -144,6 +169,23 @@ def test_val_str_truncation_applies_to_no_changes_path_too():
     long_value = "y" * 1500
     out = build_intervals(CREATED, {"status": (long_value, None)}, [], TRACKED)
     assert len(out[0].val_str.encode("utf-8")) <= 1000
+
+
+# --- Item 3: val_id truncates to 100 bytes (TEST_ISSUE_FIELD_HISTORY.val_id is
+# VARCHAR2(100 BYTE) while changelog from_id/to_id are VARCHAR2(255 BYTE)) ---
+
+def test_val_id_truncates_to_100_bytes():
+    """assignee user key나 플러그인 옵션 id는 255바이트까지 올 수 있다 — 그대로
+    넣으면 val_id 컬럼에서 ORA-12899가 난다."""
+    t = datetime(2026, 1, 5, tzinfo=timezone.utc)
+    long_id = "i" * 200
+    change = ChangelogItem(
+        history_id="h1", item_seq=0, author_user_key=None, author_display_name=None,
+        changed_at=t, field_name="status", field_id="status",
+        from_id=None, from_str="To Do", to_id=long_id, to_str="완료",
+    )
+    out = build_intervals(CREATED, {"status": ("완료", long_id)}, [change], TRACKED)
+    assert all(i.val_id is None or len(i.val_id.encode("utf-8")) <= 100 for i in out)
 
 
 # --- status_category 병합 ---

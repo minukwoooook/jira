@@ -26,9 +26,10 @@ def rec(monkeypatch):
                                None, "To Do", None, "완료")]
     }
     r.returns["update_first_done_at"] = lambda *a, **k: 1
+    r.returns["load_current_eav_values"] = lambda *a, **k: {}
     r.patch(monkeypatch, mod.history_repo,
             "status_category_map", "load_issue_states", "load_changes",
-            "replace_history", "update_first_done_at")
+            "replace_history", "update_first_done_at", "load_current_eav_values")
     monkeypatch.setattr(mod, "_tracked_fields", lambda conn, i: FIELD_PKS)
     monkeypatch.setattr(CONN, "commit", lambda: None, raising=False)
     return r
@@ -128,3 +129,74 @@ def test_missing_category_of_falls_back_to_db_derived_map(rec):
     대체한다."""
     mod.derive_history(CONN, 1, [500])
     assert rec.count("status_category_map") == 1
+
+
+def test_category_of_override_value_actually_lands_in_the_written_row(rec):
+    """status_category_map을 다시 안 부른다는 것만으로는 부족하다 — 넘긴 맵의
+    효과가 실제로 기록된 status_category val_str에 반영돼야 한다. 워크플로우에서
+    이미 빠진(현재 어느 이슈도 안 쓰는, 그래서 DB 파생 맵에는 없는) 상태 이름으로
+    확인한다."""
+    rec.returns["load_issue_states"] = lambda conn, ids: {
+        i: {"created_at": CREATED, "current_values": {"status": ("퇴역상태", None)}}
+        for i in ids
+    }
+    rec.returns["load_changes"] = lambda conn, ids: {}
+    mod.derive_history(CONN, 1, [500], category_of={"퇴역상태": "done"})
+    cat_row = next(r for r in _rows(rec, 500) if r["field_pk"] == 2)
+    assert cat_row["val_str"] == "done"
+
+
+# --- Critical fix 2: current_values must cover every tracked field, not just status ---
+
+def test_non_status_tracked_field_uses_current_value_not_nulled(rec, monkeypatch):
+    """이전에는 load_issue_states가 status만 채워서, priority 등 다른 tracked
+    필드는 매번 '현재값 없음(None)'으로 취급되어 이력 종점 불일치로 잘못 지워지고
+    이슈마다 경고가 났다. priority도 현재값이 실려 있으면 changelog의 마지막 값이
+    그대로 유지돼야 한다."""
+    monkeypatch.setattr(mod, "_tracked_fields",
+                        lambda conn, i: {**FIELD_PKS, "priority": 3})
+    rec.returns["load_issue_states"] = lambda conn, ids: {
+        i: {"created_at": CREATED, "current_values": {
+            "status": ("완료", "10"), "priority": ("High", None),
+        }} for i in ids
+    }
+    rec.returns["load_changes"] = lambda conn, ids: {
+        ids[0]: [ChangelogItem("h2", 0, None, None, T1, "priority", "priority",
+                               None, "Low", None, "High")]
+    }
+    mod.derive_history(CONN, 1, [500])
+    priority_row = next(r for r in _rows(rec, 500)
+                        if r["field_pk"] == 3 and r["valid_to"] == SENTINEL)
+    assert priority_row["val_str"] == "High"
+
+
+def test_eav_current_values_are_merged_by_field_pk(rec, monkeypatch):
+    """커스텀(EAV) dimension 필드의 현재값은 load_current_eav_values가 field_pk로
+    돌려주므로, field_id로 뒤집어 병합돼야 changelog 종점과 올바르게 비교된다."""
+    monkeypatch.setattr(mod, "_tracked_fields",
+                        lambda conn, i: {**FIELD_PKS, "customfield_10001": 7})
+    rec.returns["load_current_eav_values"] = lambda conn, ids: {
+        ids[0]: {7: ("결함", "opt-1")}
+    }
+    rec.returns["load_changes"] = lambda conn, ids: {
+        ids[0]: [ChangelogItem("h3", 0, None, None, T1, "Defect Cause",
+                               "customfield_10001", "opt-0", "버그", "opt-1", "결함")]
+    }
+    mod.derive_history(CONN, 1, [500])
+    custom_row = next(r for r in _rows(rec, 500)
+                      if r["field_pk"] == 7 and r["valid_to"] == SENTINEL)
+    assert custom_row["val_str"] == "결함"
+
+
+# --- Item 6: batch must stay within Oracle's IN-list ceiling ---
+
+def test_batch_over_1000_is_rejected():
+    """_binds가 batch 크기 그대로 issue_id IN (...)을 만든다. 1000을 넘기면
+    ORA-01795 (IN 리스트 표현식 1000개 상한)에 걸린다 — 호출 시점에 막는다."""
+    with pytest.raises(ValueError):
+        mod.derive_history(CONN, 1, [1], batch=1001)
+
+
+def test_first_done_at_batch_over_1000_is_rejected():
+    with pytest.raises(ValueError):
+        mod.update_first_done_at(CONN, [1], batch=1001)
