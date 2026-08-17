@@ -1,0 +1,194 @@
+import logging
+from dataclasses import dataclass, field
+from datetime import datetime, timedelta, timezone
+
+from jira_dashboard.db.repository import history as history_repo
+from jira_dashboard.db.repository import issue as issue_repo
+from jira_dashboard.db.repository.catalog import (
+    field_pk_by_field_id, field_pk_by_field_name,
+)
+from jira_dashboard.jira.parser import parse_field_defs, parse_issue
+from jira_dashboard.jira.protocol import JiraClient
+
+log = logging.getLogger(__name__)
+
+EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
+OVERLAP = timedelta(minutes=5)
+
+
+@dataclass
+class SyncResult:
+    fetched: int = 0
+    upserted: int = 0
+    skipped: int = 0
+    parse_failures: int = 0
+    changelog_truncated: int = 0
+    max_updated: datetime | None = None
+    changed_issue_ids: list[int] = field(default_factory=list)
+
+
+def build_jql(project_key: str, since: datetime | None) -> str:
+    start = (since or EPOCH).strftime("%Y-%m-%d %H:%M")
+    return f'project = {project_key} AND updated >= "{start}" ORDER BY updated ASC'
+
+
+def next_watermark(max_updated: datetime | None,
+                   previous: datetime | None) -> datetime | None:
+    """다음 시작점 = 이번 최대 updated - 5분 (의도적 중복 구간, spec §5.2)."""
+    if max_updated is None:
+        return previous
+    return max_updated - OVERLAP
+
+
+def _iter_pages(client: JiraClient, jql: str, page_size: int):
+    start_at = 0
+    while True:
+        page = client.search_issues(jql, start_at, page_size, True)
+        if not page.issues:
+            return
+        yield page
+        # 요청값이 아니라 서버가 응답한 max_results로 전진한다 (A7)
+        start_at += page.max_results
+        if start_at >= page.total:
+            return
+
+
+def _full_changelog(client: JiraClient, raw_issue: dict) -> tuple[list[dict], bool]:
+    """Collect as much changelog as the API will give. Returns (histories, truncated).
+
+    DC 10.3 offers no way to page changelog: /issue/{key} takes no startAt and there is
+    no dedicated changelog endpoint. So this may legitimately return fewer than `total`,
+    and the no-progress guard below is what keeps it from looping on a server that
+    re-serves the same slice. (Correction 2)
+    """
+    cl = raw_issue.get("changelog") or {}
+    histories = list(cl.get("histories") or [])
+    total = int(cl.get("total", len(histories)))
+    seen = {str(h["id"]) for h in histories}
+    while len(histories) < total:
+        page = client.get_issue_changelog(raw_issue["key"], len(histories))
+        fresh = [h for h in page.histories if str(h["id"]) not in seen]
+        if not fresh:
+            break
+        seen.update(str(h["id"]) for h in fresh)
+        histories.extend(fresh)
+    truncated = len(histories) < total
+    if truncated:
+        log.warning("changelog truncated for %s: collected %d of %d entries",
+                    raw_issue["key"], len(histories), total)
+    return histories, truncated
+
+
+def sync_issues(conn, client: JiraClient, instance_id: int, project_id: int,
+                project_key: str, since: datetime | None,
+                *, page_size: int = 100) -> SyncResult:
+    field_index = {fd.field_id: fd for fd in parse_field_defs(client.get_fields())}
+    category_of = {s["name"]: s["statusCategory"]["key"] for s in client.get_statuses()}
+    field_pks = field_pk_by_field_id(conn, instance_id)
+    field_names = field_pk_by_field_name(conn, instance_id)
+
+    result = SyncResult()
+    jql = build_jql(project_key, since)
+
+    for page in _iter_pages(client, jql, page_size):
+        result.fetched += len(page.issues)
+        jira_ids = [str(i["id"]) for i in page.issues]
+
+        # ① 기존 상태를 먼저 읽는다
+        existing = issue_repo.load_existing(conn, instance_id, jira_ids)
+
+        # ② 해시로 분류
+        pending, unchanged_ids = [], []
+        for raw in page.issues:
+            jid = str(raw["id"])
+            cl = raw.get("changelog") or {}
+            histories, truncated = _full_changelog(client, raw)
+            raw["changelog"] = {**cl, "histories": histories}
+            if truncated:
+                result.changelog_truncated += 1
+            raw_bytes = issue_repo.canonical_json(raw)
+            digest = issue_repo.sha256_hex(raw_bytes)
+            payload = issue_repo.gzip_bytes(raw_bytes)
+            prior = existing.get(jid)
+            if prior is not None and prior.payload_hash == digest:
+                unchanged_ids.append(prior.issue_id)
+                continue
+            pending.append((raw, payload, digest, prior))
+
+        issue_repo.touch_synced_at(conn, unchanged_ids)
+        result.skipped += len(unchanged_ids)
+
+        # 파싱을 먼저 해서 실패한 것을 걸러낸 뒤 채번한다 (spec §5.8, Correction 4)
+        parsed_rows = []
+        for raw, payload, digest, prior in pending:
+            try:
+                parsed = parse_issue(raw, field_index, category_of)
+            except Exception:
+                log.exception("failed to parse issue %s; skipping", raw.get("key"))
+                result.parse_failures += 1
+                continue
+            parsed_rows.append((raw, payload, digest, prior, parsed))
+
+        new_count = sum(1 for *_, prior, _ in parsed_rows if prior is None)
+        fresh_ids = iter(issue_repo.next_issue_ids(conn, new_count))
+
+        issue_rows, raw_rows, cl_raw_rows = [], [], []
+        eav_by_issue: dict[int, list[dict]] = {}
+        changelog_by_issue: dict[int, list] = {}
+
+        for raw, payload, digest, prior, parsed in parsed_rows:
+            issue_id = prior.issue_id if prior is not None else next(fresh_ids)
+
+            issue_rows.append({
+                "issue_id": issue_id, "instance_id": instance_id,
+                "project_id": project_id, "jira_issue_id": parsed.jira_issue_id,
+                "issue_key": parsed.issue_key,
+                "issue_type_name": parsed.issue_type_name,
+                "status_name": parsed.status_name,
+                "status_category": parsed.status_category,
+                "priority_name": parsed.priority_name,
+                "resolution_name": parsed.resolution_name,
+                "assignee_user_key": parsed.assignee_user_key,
+                "assignee_display_name": parsed.assignee_display_name,
+                "reporter_user_key": parsed.reporter_user_key,
+                "reporter_display_name": parsed.reporter_display_name,
+                "parent_key": parsed.parent_key, "summary": parsed.summary,
+                "created_at": parsed.created_at, "updated_at": parsed.updated_at,
+                "resolved_at": parsed.resolved_at, "due_date": parsed.due_date,
+                "original_estimate_sec": parsed.original_estimate_sec,
+                "remaining_estimate_sec": parsed.remaining_estimate_sec,
+                "time_spent_sec": parsed.time_spent_sec,
+            })
+            raw_rows.append({"issue_id": issue_id, "payload": payload,
+                             "payload_hash": digest})
+            cl_bytes = issue_repo.canonical_json(raw.get("changelog") or {})
+            cl_raw_rows.append({
+                "issue_id": issue_id, "payload": issue_repo.gzip_bytes(cl_bytes),
+                "payload_hash": issue_repo.sha256_hex(cl_bytes),
+            })
+            eav_by_issue[issue_id] = [
+                {"issue_id": issue_id, "field_pk": field_pks[v.field_id],
+                 "val_seq": v.val_seq, "val_str": v.val_str, "val_num": v.val_num,
+                 "val_date": v.val_date, "val_id": v.val_id}
+                for v in parsed.custom_values if v.field_id in field_pks
+            ]
+            changelog_by_issue[issue_id] = list(parsed.changelog)
+
+            if result.max_updated is None or parsed.updated_at > result.max_updated:
+                result.max_updated = parsed.updated_at
+
+        # ③ 이슈 → ④ raw → ⑤ EAV → ⑥ changelog. FK 때문에 순서를 바꿀 수 없다.
+        if issue_rows:
+            issue_repo.upsert_issues(conn, issue_rows)
+            issue_repo.upsert_raw(conn, "test_issue_raw", raw_rows)
+            issue_repo.upsert_raw(conn, "test_changelog_raw", cl_raw_rows)
+        for issue_id, values in eav_by_issue.items():
+            issue_repo.replace_field_values(conn, issue_id, values)
+        for issue_id, items in changelog_by_issue.items():
+            history_repo.upsert_changelog(conn, issue_id, items, field_pks, field_names)
+
+        result.upserted += len(issue_rows)
+        result.changed_issue_ids.extend(r["issue_id"] for r in issue_rows)
+        conn.commit()
+
+    return result

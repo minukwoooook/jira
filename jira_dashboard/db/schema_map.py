@@ -10,6 +10,7 @@ _CREATE_TABLE = re.compile(
     r"CREATE\s+TABLE\s+(\w+)\s*\((.*?)\)\s*(?:LOB\s*\(|;|$)",
     re.IGNORECASE | re.DOTALL,
 )
+_CREATE_SEQUENCE = re.compile(r"CREATE\s+SEQUENCE\s+(\w+)", re.IGNORECASE)
 # 컬럼 정의가 아닌 줄
 _NOT_A_COLUMN = re.compile(
     r"^\s*(CONSTRAINT|PRIMARY|UNIQUE|FOREIGN|CHECK)\b", re.IGNORECASE
@@ -51,6 +52,17 @@ def parse_ddl(ddl_dir: Path) -> dict[str, set[str]]:
                     cols.add(m.group(1).upper())
             tables[name.upper()] = cols
     return tables
+
+
+def parse_sequences(ddl_dir: Path) -> set[str]:
+    """CREATE SEQUENCE로 선언된 이름 집합. 시퀀스는 컬럼이 없으므로 parse_ddl의
+    테이블 사전과는 별도로 둔다 (컬럼 없는 항목이 섞이면 parse_ddl의 계약이
+    깨진다)."""
+    names: set[str] = set()
+    for path in sorted(Path(ddl_dir).glob("[0-9][0-9]_*.sql")):
+        text = re.sub(r"--[^\n]*", "", path.read_text(encoding="utf-8"))
+        names.update(n.upper() for n in _CREATE_SEQUENCE.findall(text))
+    return names
 
 
 def ddl_text(ddl_dir: Path) -> str:

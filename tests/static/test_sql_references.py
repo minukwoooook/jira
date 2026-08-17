@@ -44,10 +44,18 @@ def _all_sql() -> list[tuple[str, str]]:
 
 
 def test_every_referenced_table_exists(ddl_dir):
+    """테이블 참조뿐 아니라 시퀀스 참조도 허용한다 (예: NEXTVAL 채번).
+
+    parse_ddl은 테이블 전용 계약(test_parses_all_16_tables)을 지키므로 시퀀스는
+    섞지 않고 parse_sequences로 따로 확인한다.
+    """
     tables = schema_map.parse_ddl(ddl_dir)
+    sequences = schema_map.parse_sequences(ddl_dir)
     for module_name, sql in _all_sql():
         for token in _TABLE_TOKEN.findall(sql):
-            assert token.upper() in tables, f"{module_name}: unknown table {token}"
+            up = token.upper()
+            assert up in tables or up in sequences, \
+                f"{module_name}: unknown table {token}"
 
 
 def test_every_referenced_column_exists(ddl_dir):
