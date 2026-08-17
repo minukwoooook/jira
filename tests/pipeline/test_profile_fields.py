@@ -34,6 +34,16 @@ def test_eav_profile_is_a_single_group_by():
     assert "GROUP  BY" in mod.MERGE_EAV_COUNTS or "GROUP BY" in mod.MERGE_EAV_COUNTS
 
 
+def test_distinct_count_pins_explicit_conversion_masks():
+    """TO_CHAR without a mask is session-dependent (NLS_NUMERIC_CHARACTERS /
+    NLS_TIMESTAMP_FORMAT) — distinct genuinely-different values can silently
+    collapse into one string and undercount. A string check is the honest
+    limit here: without a live DB there's no way to demonstrate the NLS
+    behaviour itself, only that the mask is present in the SQL we send."""
+    assert "TO_CHAR(v.val_num, 'TM')" in mod.MERGE_EAV_COUNTS
+    assert "TO_CHAR(v.val_date, 'YYYY-MM-DD HH24:MI:SS.FF6')" in mod.MERGE_EAV_COUNTS
+
+
 @pytest.fixture(scope="session")
 def ddl_dir() -> Path:
     from jira_dashboard.db import schema_map

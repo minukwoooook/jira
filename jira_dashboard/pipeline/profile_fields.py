@@ -1,5 +1,6 @@
 import logging
 
+from jira_dashboard.db.repository.catalog import field_pk_by_field_id
 from jira_dashboard.jira.fieldmap import SYSTEM_FIELD_MAP
 
 log = logging.getLogger(__name__)
@@ -20,8 +21,9 @@ MERGE INTO test_jira_project_field t
 USING (
   SELECT i.project_id, v.field_pk,
          COUNT(DISTINCT v.issue_id) AS issue_count,
-         COUNT(DISTINCT COALESCE(v.val_str, TO_CHAR(v.val_num),
-                                 TO_CHAR(v.val_date))) AS distinct_value_count
+         COUNT(DISTINCT COALESCE(v.val_str, TO_CHAR(v.val_num, 'TM'),
+                                 TO_CHAR(v.val_date, 'YYYY-MM-DD HH24:MI:SS.FF6')))
+           AS distinct_value_count
   FROM   test_issue_field_value v
   JOIN   test_jira_issue i ON i.issue_id = v.issue_id
   WHERE  i.instance_id = :instance_id AND i.deleted_at IS NULL
@@ -48,10 +50,6 @@ WHEN NOT MATCHED THEN
   INSERT (project_id, field_pk, issue_count, distinct_value_count, last_profiled_at)
   VALUES (:project_id, :field_pk, :issue_count, :distinct_value_count,
           SYS_EXTRACT_UTC(SYSTIMESTAMP))
-"""
-
-SELECT_FIELD_PKS = """
-SELECT field_id, field_pk FROM test_jira_field WHERE instance_id = :instance_id
 """
 
 SELECT_AXIS_CANDIDATES = """
@@ -90,8 +88,7 @@ def profile_fields(conn, instance_id: int) -> int:
     # ③ 고정 컬럼은 JIRA_ISSUE 1회 스캔으로 전부 계산
     cur.execute(_column_scan_sql(), instance_id=instance_id)
     rows = cur.fetchall()
-    cur.execute(SELECT_FIELD_PKS, instance_id=instance_id)
-    field_pks = dict(cur.fetchall())
+    field_pks = field_pk_by_field_id(conn, instance_id)
 
     n = len(COLUMN_FIELDS)
     payload = []
