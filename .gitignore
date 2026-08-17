@@ -5,3 +5,4 @@ vendor/
 tests/fixtures/captured/
 .superpowers/
 .venv/
+*.egg-info/
