@@ -7,7 +7,7 @@ import pytest
 
 from jira_dashboard.db import schema_map
 
-REPO_PACKAGE = "jira_dashboard.db.repository"
+SCANNED_PACKAGES = ["jira_dashboard.db.repository", "jira_dashboard.pipeline"]
 _TABLE_TOKEN = re.compile(r"\b(TEST_\w+)\b", re.IGNORECASE)
 _BIND = re.compile(r":(\w+)")
 # SQL로 볼 최소 신호
@@ -17,14 +17,17 @@ _LOOKS_LIKE_SQL = re.compile(
 
 
 def _repository_modules():
-    try:
-        pkg = importlib.import_module(REPO_PACKAGE)
-    except ModuleNotFoundError:
-        return []
-    return [
-        importlib.import_module(f"{REPO_PACKAGE}.{m.name}")
-        for m in pkgutil.iter_modules(pkg.__path__)
-    ]
+    modules = []
+    for package in SCANNED_PACKAGES:
+        try:
+            pkg = importlib.import_module(package)
+        except ModuleNotFoundError:
+            continue
+        modules.extend(
+            importlib.import_module(f"{package}.{m.name}")
+            for m in pkgutil.iter_modules(pkg.__path__)
+        )
+    return modules
 
 
 def _sql_literals(module) -> list[tuple[str, str]]:
