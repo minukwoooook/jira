@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from jira_dashboard.jira.fieldmap import SYSTEM_FIELD_MAP, value_kind_of
+from jira_dashboard.jira.fieldmap import SYSTEM_FIELD_MAP, SystemFieldSpec, value_kind_of
 from jira_dashboard.jira.models import FieldDef
 from jira_dashboard.jira import parser
 
@@ -115,7 +115,9 @@ def test_summary_is_not_a_dimension():
 
 
 def test_parse_issue_stores_status_category_key(sample_issue, field_index):
-    issue = parser.parse_issue(sample_issue, field_index, category_of={"완료": "done"})
+    """tier 1(응답의 statusCategory.key)이 tier 2(category_of 사전)보다 우선해야 한다.
+    두 값을 일부러 다르게 줘서 tier 1이 실제로 이겼는지 구별한다."""
+    issue = parser.parse_issue(sample_issue, field_index, category_of={"완료": "indeterminate"})
     assert issue.status_category == "done"
     assert issue.status_name == "완료"
 
@@ -144,6 +146,38 @@ def test_parse_issue_includes_multi_value_system_fields_as_custom(sample_issue, 
     """labels는 시스템 필드지만 다중값이라 EAV로 간다 (spec 4.1)."""
     issue = parser.parse_issue(sample_issue, field_index, category_of={"완료": "done"})
     assert "labels" in {v.field_id for v in issue.custom_values}
+
+
+def test_multi_value_system_field_guard_still_routes_to_custom_values(
+    monkeypatch, sample_issue, field_index
+):
+    """방어적 가드: SYSTEM_FIELD_MAP에 다중값 필드가 들어와도 고정 컬럼이 아니라
+    EAV로 가야 한다 (spec 4.1). 이 테스트는 parse_issue의
+    `not _is_multi_value(fd)` conjunct를 지우면 실패해야 한다."""
+    monkeypatch.setitem(
+        SYSTEM_FIELD_MAP, "fake_multi",
+        SystemFieldSpec("fake_multi_col", None, "MULTI", True, False),
+    )
+    field_index = dict(field_index)
+    field_index["fake_multi"] = FieldDef(
+        "fake_multi", "Fake Multi", False, "array", "string", None
+    )
+    sample_issue["fields"]["fake_multi"] = ["a", "b"]
+
+    issue = parser.parse_issue(sample_issue, field_index, category_of={"완료": "done"})
+    assert "fake_multi" in {v.field_id for v in issue.custom_values}
+
+
+def test_no_system_field_map_entry_is_array_typed():
+    """SYSTEM_FIELD_MAP에 다중값(MULTI) 항목이 없다는 불변식을 문서화한다.
+    이게 지금 parse_issue의 다중값 가드가 죽은 코드처럼 보이는 이유다.
+    누군가 (예: components) 다중값 필드를 매핑표에 추가하면 이 테스트가 실패해
+    parse_issue의 `not _is_multi_value(fd)` 가드를 확인하라는 신호를 준다."""
+    for field_id, spec in SYSTEM_FIELD_MAP.items():
+        assert spec.value_kind != "MULTI", (
+            f"{field_id} is array-typed now — verify parse_issue's multi-value "
+            "guard is actually exercised by a test"
+        )
 
 
 def test_parse_issue_reports_changelog_total(sample_issue, field_index):
