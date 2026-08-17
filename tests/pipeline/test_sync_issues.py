@@ -1,8 +1,10 @@
+import logging
 from datetime import datetime, timedelta, timezone
 
 import pytest
 
 from jira_dashboard.db.repository import issue as issue_repo
+from jira_dashboard.jira.protocol import SearchPage
 from jira_dashboard.pipeline import sync_issues as mod
 from tests.stubs import CONN, Recorder
 
@@ -89,8 +91,14 @@ def test_both_raw_tables_are_written(rec, fake_jira):
 
 # --- 해시 스킵 ---
 
-def test_unchanged_issue_only_touches_synced_at(monkeypatch, fake_jira):
-    """1회차 해시를 그대로 돌려주면 2회차는 전부 스킵되어야 한다."""
+def _sync_twice_with_matching_hashes(monkeypatch, fake_jira):
+    """1회차를 돌려 해시/키를 얻고, 1회차와 똑같은 해시를 돌려주는 2회차를 실행한다.
+
+    Item 3: 기본 `rec` 픽스처는 load_existing이 항상 {}를 돌려줘 아무것도 스킵되지
+    않는다 — 그 픽스처로는 "스킵된 이슈도 touch_synced_at을 받는다"를 검증할 수
+    없다 (touch_synced_at([])이 호출돼도 통과해버리는 공허한 테스트가 된다).
+    실제로 스킵이 일어나는 2회차를 구성해야 의미가 생긴다.
+    """
     first = Recorder()
     first.returns["load_existing"] = lambda *a, **k: {}
     first.returns["next_issue_ids"] = lambda conn, n: list(range(1, n + 1))
@@ -125,6 +133,12 @@ def test_unchanged_issue_only_touches_synced_at(monkeypatch, fake_jira):
                  "touch_synced_at", "upsert_raw", "replace_field_values")
     second.patch(monkeypatch, mod.history_repo, "upsert_changelog")
     result = _run(fake_jira)
+    return first, second, result
+
+
+def test_unchanged_issue_only_touches_synced_at(monkeypatch, fake_jira):
+    """1회차 해시를 그대로 돌려주면 2회차는 전부 스킵되어야 한다."""
+    first, second, result = _sync_twice_with_matching_hashes(monkeypatch, fake_jira)
 
     assert result.upserted == 0
     assert result.skipped > 0
@@ -132,10 +146,18 @@ def test_unchanged_issue_only_touches_synced_at(monkeypatch, fake_jira):
     assert second.count("touch_synced_at") > 0
 
 
-def test_skipped_issues_still_get_synced_at_touched(rec, fake_jira):
-    """마지막으로 확인한 시각이 정확해야 삭제 감지가 오래된 행을 구분한다."""
-    _run(fake_jira)
-    assert rec.count("touch_synced_at") >= 1
+def test_skipped_issues_still_get_synced_at_touched(monkeypatch, fake_jira):
+    """마지막으로 확인한 시각이 정확해야 삭제 감지가 오래된 행을 구분한다.
+
+    실제로 스킵된 issue_id가 touch_synced_at에 전달됐는지까지 확인한다 — 빈 리스트로
+    불려도 통과하는 `count() >= 1` 만으로는 부족하다.
+    """
+    first, second, result = _sync_twice_with_matching_hashes(monkeypatch, fake_jira)
+
+    touched = [issue_id for call in second.args_of("touch_synced_at")
+               for issue_id in call["args"][0]]
+    assert touched, "스킵 경로에서도 touch_synced_at에 실제 issue_id가 전달돼야 한다"
+    assert result.skipped == len(touched)
 
 
 # --- 페이징 ---
@@ -159,6 +181,23 @@ def test_paging_advances_by_response_max_results(monkeypatch, fixture_dir):
     total = client.search_issues("project = PROJ", 0, 500, False).total
     result = mod.sync_issues(CONN, client, 1, 7, "PROJ", None, page_size=100)
     assert result.fetched == total
+
+
+def test_iter_pages_stops_on_zero_progress(fake_jira):
+    """Item 8: max_results=0인데 issues가 비어있지 않은 응답이 오면 start_at이 절대
+    전진하지 못해 같은 페이지를 영원히 재요청한다 — C2와 같은 무진행 루프 계열이다."""
+    real_page = fake_jira.search_issues(
+        "project = PROJ ORDER BY updated ASC", 0, 100, True
+    )
+    stuck_page = SearchPage(start_at=0, max_results=0, total=real_page.total,
+                            issues=real_page.issues)
+
+    class _ZeroProgressClient:
+        def search_issues(self, jql, start_at, max_results, expand_changelog):
+            return stuck_page
+
+    pages = list(mod._iter_pages(_ZeroProgressClient(), "whatever", 100))
+    assert len(pages) == 1
 
 
 def test_overlap_window_appears_in_jql(rec, fake_jira):
@@ -213,6 +252,49 @@ def test_changelog_supplemental_fetch_does_not_spin_on_no_progress(rec, fake_jir
         assert len(items) <= 100, "server never progressed past the inline slice"
 
 
+class _NullCursor:
+    """실제 SQL을 실행하지 않는 커서. history_repo.upsert_changelog의 진짜 해석
+    로직(3단계 field_pk 매칭)은 그대로 돌리되 conn.cursor()가 오라클을 건드리지
+    않게 한다."""
+
+    def executemany(self, *a, **k):
+        pass
+
+    def execute(self, *a, **k):
+        pass
+
+
+def test_unresolved_changelog_field_names_are_logged_once_as_a_distinct_set(
+    monkeypatch, fake_jira, caplog,
+):
+    """Item 6: field 문자열이 fieldId/field_id/카탈로그 이름 어디에도 안 걸리면
+    field_pk가 조용히 NULL이 된다 (§5.3 이력 유실). 개별 행마다 찍으면 안 되고,
+    실행당 한 번, 서로 다른 이름의 집합으로만 찍혀야 한다.
+
+    history_repo.upsert_changelog는 일부러 stub하지 않는다 — 진짜 3단계 해석기를
+    돌려야 이 회귀를 잡을 수 있다. 대신 conn.cursor()만 no-op으로 바꿔 오라클
+    호출 없이 실행한다. FIELD_PKS/field_names 테스트 더미에는 "status"가 없으므로
+    픽스처의 status 변경 이력이 전부 미해결로 잡힌다.
+    """
+    r = Recorder()
+    r.returns["load_existing"] = lambda *a, **k: {}
+    r.returns["next_issue_ids"] = lambda conn, n: list(range(9000, 9000 + n))
+    r.patch(monkeypatch, mod.issue_repo,
+            "load_existing", "next_issue_ids", "upsert_issues", "touch_synced_at",
+            "upsert_raw", "replace_field_values")
+    monkeypatch.setattr(mod, "field_pk_by_field_id", lambda conn, i: FIELD_PKS)
+    monkeypatch.setattr(mod, "field_pk_by_field_name", lambda conn, i: {})
+    monkeypatch.setattr(CONN, "commit", lambda: None, raising=False)
+    monkeypatch.setattr(CONN, "cursor", lambda: _NullCursor(), raising=False)
+
+    with caplog.at_level(logging.WARNING, logger=mod.log.name):
+        _run(fake_jira)
+
+    unresolved_logs = [r for r in caplog.records if "unresolved" in r.getMessage().lower()]
+    assert len(unresolved_logs) == 1, "한 번만, 실행 전체에 대해 찍혀야 한다"
+    assert "status" in unresolved_logs[0].getMessage()
+
+
 # --- 파싱 실패 격리 (spec 5.8) ---
 
 def test_unparseable_issue_is_skipped_not_fatal(rec, fake_jira):
@@ -227,7 +309,14 @@ def test_unparseable_issue_is_skipped_not_fatal(rec, fake_jira):
 
 
 def test_parse_failure_does_not_consume_a_sequence_id(rec, fake_jira):
-    """실패한 이슈가 채번을 소진하면 뒤 이슈들이 id를 못 받는다."""
+    """실패한 이슈가 채번을 소진하면 뒤 이슈들이 id를 못 받는다.
+
+    Item 2: 개수만 비교하면 (고유 id 7개, 7 upserted) '파싱 전에 채번'하는
+    버그와 구분이 안 된다 — 그 버그는 8개를 채번해 실패한 1개의 id를 그냥
+    버리므로 여전히 서로 다른 7개 id가 7건에 쓰인다. 실제로 구분하려면
+    (a) next_issue_ids에 요청한 개수가 살아남은 이슈 수와 정확히 같은지,
+    (b) 받은 id가 시작점부터 빈틈없이 이어지는지를 봐야 한다.
+    """
     page = fake_jira.search_issues("project = PROJ ORDER BY updated ASC", 0, 100, True)
     victim = str(page.issues[0]["id"])
     fake_jira._issues[victim]["fields"]["created"] = "not-a-timestamp"
@@ -237,6 +326,14 @@ def test_parse_failure_does_not_consume_a_sequence_id(rec, fake_jira):
                for row in call["args"][0]]
     assert len(written) == len(set(written))
     assert len(written) == result.upserted
+
+    requested = rec.args_of("next_issue_ids")[0]["args"][0]
+    assert requested == result.upserted, (
+        "next_issue_ids를 파싱 실패 개수까지 포함해 요청하면 id 하나가 좌초된다"
+    )
+    assert written == list(range(9000, 9000 + len(written))), (
+        "좌초된 id가 있으면 9000부터 이어지는 구간에 구멍이 생긴다"
+    )
 
 
 # --- EAV 매핑 ---
@@ -280,11 +377,11 @@ def test_payload_hash_is_stable_across_pipeline_runs(monkeypatch, fake_jira):
     monkeypatch.setattr(mod, "field_pk_by_field_name", lambda conn, i: {})
     monkeypatch.setattr(CONN, "commit", lambda: None, raising=False)
     _run(fake_jira)
-    hashes_1 = {
-        row["issue_id"]: row["payload_hash"]
-        for call in r1.args_of("upsert_raw") if call["args"][0] == "test_issue_raw"
+    rows_1 = [
+        row for call in r1.args_of("upsert_raw") if call["args"][0] == "test_issue_raw"
         for row in call["args"][1]
-    }
+    ]
+    hashes_1 = {row["issue_id"]: row["payload_hash"] for row in rows_1}
 
     r2 = Recorder()
     r2.returns["load_existing"] = lambda *a, **k: {}
@@ -307,3 +404,11 @@ def test_payload_hash_is_stable_across_pipeline_runs(monkeypatch, fake_jira):
 
     assert hashes_1 == hashes_2
     assert hashes_1, "expected at least one hashed issue"
+
+    # Item 1 (critical): a same-second re-run of gzip.compress() over identical bytes
+    # can itself be reproducible, so equality of hashes across two runs does NOT prove
+    # the digest was taken over canonical JSON rather than gzip output. Pin it directly:
+    # the stored digest must differ from the digest of the stored (compressed) payload.
+    # This is the assertion that cannot pass if someone reverts to hashing gzip output.
+    for row in rows_1:
+        assert row["payload_hash"] != issue_repo.sha256_hex(row["payload"])

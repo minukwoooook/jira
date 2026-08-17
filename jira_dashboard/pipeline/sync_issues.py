@@ -47,6 +47,12 @@ def _iter_pages(client: JiraClient, jql: str, page_size: int):
         if not page.issues:
             return
         yield page
+        if page.max_results <= 0:
+            # max_results가 0인데 issues는 비어있지 않은 응답 — 전진할 수 없어
+            # 같은 페이지를 영원히 재요청하게 된다. C2와 같은 무진행 루프 계열이다.
+            log.warning("search_issues returned max_results=%d with issues present; "
+                        "stopping paging to avoid a no-progress loop", page.max_results)
+            return
         # 요청값이 아니라 서버가 응답한 max_results로 전진한다 (A7)
         start_at += page.max_results
         if start_at >= page.total:
@@ -89,6 +95,7 @@ def sync_issues(conn, client: JiraClient, instance_id: int, project_id: int,
 
     result = SyncResult()
     jql = build_jql(project_key, since)
+    unresolved_field_names: set[str] = set()
 
     for page in _iter_pages(client, jql, page_size):
         result.fetched += len(page.issues)
@@ -185,10 +192,22 @@ def sync_issues(conn, client: JiraClient, instance_id: int, project_id: int,
         for issue_id, values in eav_by_issue.items():
             issue_repo.replace_field_values(conn, issue_id, values)
         for issue_id, items in changelog_by_issue.items():
-            history_repo.upsert_changelog(conn, issue_id, items, field_pks, field_names)
+            unresolved = history_repo.upsert_changelog(
+                conn, issue_id, items, field_pks, field_names
+            )
+            unresolved_field_names |= (unresolved or set())
 
         result.upserted += len(issue_rows)
         result.changed_issue_ids.extend(r["issue_id"] for r in issue_rows)
         conn.commit()
+
+    if unresolved_field_names:
+        # 개별 행마다 찍으면 이슈 10만 건에서 로그가 터진다 — 서로 다른 필드 이름만
+        # 한 번 모아 찍는다. 온프레미스 첫 실행이 이 로그로 어떤 필드에 별칭 매핑이
+        # 필요한지 정확히 알려준다 (Correction 3의 사후 가시성).
+        log.warning(
+            "changelog field_pk unresolved for %d distinct field name(s): %s",
+            len(unresolved_field_names), sorted(unresolved_field_names),
+        )
 
     return result

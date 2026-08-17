@@ -1,3 +1,10 @@
+import logging
+
+from jira_dashboard.jira.models import MAX_CHANGELOG_STR_BYTES
+from jira_dashboard.jira.parser import truncate
+
+log = logging.getLogger(__name__)
+
 _MERGE_CHANGELOG = """
 MERGE INTO test_issue_changelog t
 USING (SELECT :issue_id AS issue_id, :jira_history_id AS jira_history_id,
@@ -42,19 +49,42 @@ def _resolve_field_pk(item, field_pks: dict[str, int],
 
 def upsert_changelog(conn, issue_id: int, items,
                      field_pks: dict[str, int],
-                     field_names: dict[str, int]) -> None:
-    """A5: fieldId가 있으면 그것으로 매칭. 없으면 이름으로 시도한다 (Correction 3)."""
+                     field_names: dict[str, int]) -> set[str]:
+    """A5: fieldId가 있으면 그것으로 매칭. 없으면 이름으로 시도한다 (Correction 3).
+
+    field_name이 빈 문자열인 항목은 건너뛴다 — TEST_ISSUE_CHANGELOG.field_name은
+    NOT NULL이고, Oracle은 빈 문자열을 NULL로 저장하므로 그대로 넣으면 ORA-01400이다.
+    반환값은 field_pk 해석에 실패한(카탈로그 어디에도 없는) field_name의 집합이다 —
+    호출자가 여러 이슈에 걸쳐 모아서 한 번만 로그하도록 개수 집계는 넘기지 않는다.
+    """
     if not items:
-        return
-    rows = [{
-        "issue_id": issue_id, "jira_history_id": item.history_id,
-        "item_seq": item.item_seq,
-        "author_user_key": item.author_user_key,
-        "author_display_name": item.author_display_name,
-        "changed_at": item.changed_at,
-        "field_pk": _resolve_field_pk(item, field_pks, field_names),
-        "field_name": item.field_name,
-        "from_id": item.from_id, "from_str": item.from_str or None,
-        "to_id": item.to_id, "to_str": item.to_str or None,
-    } for item in items]
-    conn.cursor().executemany(_MERGE_CHANGELOG, rows, batcherrors=False)
+        return set()
+    rows = []
+    unresolved: set[str] = set()
+    for item in items:
+        if not item.field_name:
+            log.warning(
+                "issue %s: changelog item %s#%d has no field name; skipping row "
+                "(would violate NOT NULL / stores as NULL under Oracle empty-string rules)",
+                issue_id, item.history_id, item.item_seq,
+            )
+            continue
+        field_pk = _resolve_field_pk(item, field_pks, field_names)
+        if field_pk is None:
+            unresolved.add(item.field_name)
+        rows.append({
+            "issue_id": issue_id, "jira_history_id": item.history_id,
+            "item_seq": item.item_seq,
+            "author_user_key": item.author_user_key,
+            "author_display_name": item.author_display_name,
+            "changed_at": item.changed_at,
+            "field_pk": field_pk,
+            "field_name": item.field_name,
+            "from_id": item.from_id,
+            "from_str": truncate(item.from_str, MAX_CHANGELOG_STR_BYTES) or None,
+            "to_id": item.to_id,
+            "to_str": truncate(item.to_str, MAX_CHANGELOG_STR_BYTES) or None,
+        })
+    if rows:
+        conn.cursor().executemany(_MERGE_CHANGELOG, rows, batcherrors=False)
+    return unresolved

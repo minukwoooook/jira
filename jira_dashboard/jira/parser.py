@@ -21,14 +21,14 @@ def to_date(text: str | None) -> date | None:
     return date.fromisoformat(text) if text else None
 
 
-def truncate(text: str | None) -> str | None:
+def truncate(text: str | None, max_bytes: int = MAX_VAL_STR_BYTES) -> str | None:
     if text is None:
         return None
     text = text.strip()
     raw = text.encode("utf-8")
-    if len(raw) <= MAX_VAL_STR_BYTES:
+    if len(raw) <= max_bytes:
         return text
-    return raw[:MAX_VAL_STR_BYTES].decode("utf-8", errors="ignore")
+    return raw[:max_bytes].decode("utf-8", errors="ignore")
 
 
 def parse_field_defs(raw: list[dict]) -> list[FieldDef]:

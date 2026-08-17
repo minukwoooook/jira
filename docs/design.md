@@ -1001,13 +1001,21 @@ runner.py (인스턴스 단위 병렬 2~3, 인스턴스 내 프로젝트는 순�
 **해시 스킵 경로에서도 `synced_at`은 갱신한다.** 그래야 "이 이슈를 마지막으로 확인한 시각"이
 정확해지고, 삭제 감지가 오래된 행을 구분할 수 있다.
 
-#### changelog 보충 호출
+#### changelog 보충 호출 — DC 10.3에는 페이징이 없다
 
-`changelog.total > changelog.maxResults`인 이슈만
-`GET /issue/{key}?expand=changelog&startAt=100`으로 나머지를 받는다.
-**Jira의 changelog는 오래된 것부터 오름차순**이고 인라인 응답은 앞쪽 100개를 주므로,
-보충은 `startAt=100`부터다. 이 방향 가정은 첫 구현 시 실제 응답으로 반드시 확인한다 —
-반대라면 오래된 이력이 통째로 유실되고, 구간 테이블이 조용히 틀린다.
+R8/A3에서 확인된 대로 `GET /rest/api/2/issue/{issueIdOrKey}`의 쿼리 파라미터는 `expand`,
+`fields`, `updateHistory`, `properties` 넷뿐이고 **`startAt`이 없다.** v10003 스펙의
+285개 경로를 전부 뒤져봐도 changelog 전용 엔드포인트(Cloud v3의 `/issue/{key}/changelog`에
+해당하는 것)는 DC 10.3에 **존재하지 않는다.** 즉 인라인 100건을 넘는 이력은 원칙적으로
+**REST로 도달 불가능하다** — `startAt=100`으로 나머지를 받는다는 이전 설계는 틀렸다.
+
+그래도 서버가 재요청 시 다른 슬라이스를 주는 경우를 대비해 `_full_changelog`가 최선을
+다해 보충을 시도하되, **진행이 없으면(같은 항목만 반복해서 옴) 즉시 멈춘다** — 그렇지
+않으면 changelog 페이징이 없는 서버에서 무한 루프에 빠지거나 같은 이력을 중복 적재한다.
+멈춘 경우 `changelog.total`보다 적게 수집됐다는 뜻이므로 WARNING 로그를 남기고
+`SyncResult.changelog_truncated`를 1 증가시켜, 이슈별 truncation을 사후에 집계할 수
+있게 한다. **Jira의 changelog는 오래된 것부터 오름차순**이므로 잘렸을 때 유실되는 쪽은
+최신 이력이 아니라 더 오래된 이력이다.
 
 #### `fields=*all`에 대해
 
@@ -1162,7 +1170,10 @@ MERGE에 넣어둔다.**
 
 - **thin 모드 기본** — Instant Client 설치가 필요 없다. Kerberos 등이 필요할 때만 thick 검토
 - `oracledb.create_pool(min=2, max=8)` 커넥션 풀
-- `cursor.executemany(..., batcherrors=True)` — 배치 적재 + 부분 실패 격리
+- `cursor.executemany(..., batcherrors=False)` — 격리 단위는 행이 아니라 **프로젝트**다.
+  한 프로젝트의 배치 안에서 행 하나가 실패하면 그 배치 전체를 실패시켜 예외로 드러낸다.
+  `batcherrors=True`로 부분 실패를 삼키면 어떤 행이 왜 빠졌는지 조용히 묻히고, 다음 동기화
+  때도 같은 행이 같은 이유로 계속 빠질 수 있다 — 실패는 프로젝트 단위로 보이고 재시도돼야 한다
 - BLOB 적재 시 `cursor.setinputsizes(oracledb.DB_TYPE_BLOB)`
 - **모든 조회는 바인드 변수** (커서 공유 + injection 차단)
 
