@@ -1,0 +1,6 @@
+[
+  {"id": "1",  "name": "To Do",  "statusCategory": {"id": 2, "key": "new"}},
+  {"id": "3",  "name": "개발중", "statusCategory": {"id": 4, "key": "indeterminate"}},
+  {"id": "4",  "name": "리뷰중", "statusCategory": {"id": 4, "key": "indeterminate"}},
+  {"id": "10", "name": "완료",   "statusCategory": {"id": 3, "key": "done"}}
+]

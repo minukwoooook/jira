@@ -1,0 +1,2943 @@
+[
+  {
+    "id": "10101",
+    "key": "PROJ-1",
+    "fields": {
+      "project": {
+        "id": "10000",
+        "key": "PROJ"
+      },
+      "summary": "Full profile issue",
+      "status": {
+        "id": "10",
+        "name": "완료",
+        "statusCategory": {
+          "id": 3,
+          "key": "done"
+        }
+      },
+      "resolution": {
+        "id": "1",
+        "name": "Done"
+      },
+      "labels": [
+        "urgent",
+        "ux"
+      ],
+      "created": "2026-01-01T09:00:00.000+0900",
+      "updated": "2026-01-10T09:00:00.000+0900",
+      "resolutiondate": "2026-01-09T09:00:00.000+0900",
+      "duedate": "2026-01-20",
+      "timespent": 3600,
+      "customfield_10001": {
+        "value": "Regression",
+        "id": "10101"
+      },
+      "customfield_10002": 5.0,
+      "customfield_10003": "2026-01-02",
+      "customfield_10004": [
+        {
+          "value": "Auth",
+          "id": "20001"
+        },
+        {
+          "value": "Billing",
+          "id": "20002"
+        }
+      ]
+    },
+    "changelog": {
+      "startAt": 0,
+      "maxResults": 100,
+      "total": 1,
+      "histories": [
+        {
+          "id": "9001",
+          "created": "2026-01-05T09:00:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "To Do",
+              "toString": "완료",
+              "fieldId": "status"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "id": "10102",
+    "key": "PROJ-2",
+    "fields": {
+      "project": {
+        "id": "10000",
+        "key": "PROJ"
+      },
+      "summary": "All-null custom fields",
+      "status": {
+        "id": "1",
+        "name": "To Do",
+        "statusCategory": {
+          "id": 2,
+          "key": "new"
+        }
+      },
+      "labels": [],
+      "created": "2026-01-15T09:00:00.000+0900",
+      "updated": "2026-01-20T09:00:00.000+0900",
+      "customfield_10001": null,
+      "customfield_10002": null,
+      "customfield_10003": null,
+      "customfield_10004": null
+    },
+    "changelog": {
+      "startAt": 0,
+      "maxResults": 100,
+      "total": 0,
+      "histories": []
+    }
+  },
+  {
+    "id": "10103",
+    "key": "PROJ-3",
+    "fields": {
+      "project": {
+        "id": "10000",
+        "key": "PROJ"
+      },
+      "summary": "Done without resolution",
+      "status": {
+        "id": "10",
+        "name": "완료",
+        "statusCategory": {
+          "id": 3,
+          "key": "done"
+        }
+      },
+      "created": "2026-01-25T09:00:00.000+0900",
+      "updated": "2026-02-01T09:00:00.000+0900"
+    },
+    "changelog": {
+      "startAt": 0,
+      "maxResults": 100,
+      "total": 1,
+      "histories": [
+        {
+          "id": "9003",
+          "created": "2026-01-28T09:00:00.000+0900",
+          "author": {
+            "key": "asmith",
+            "name": "asmith",
+            "displayName": "Alice Smith"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "개발중",
+              "toString": "완료",
+              "fieldId": "status"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "id": "10104",
+    "key": "PROJ-4",
+    "fields": {
+      "project": {
+        "id": "10000",
+        "key": "PROJ"
+      },
+      "summary": "No changelog",
+      "status": {
+        "id": "3",
+        "name": "개발중",
+        "statusCategory": {
+          "id": 4,
+          "key": "indeterminate"
+        }
+      },
+      "created": "2026-02-01T09:00:00.000+0900",
+      "updated": "2026-02-10T09:00:00.000+0900"
+    },
+    "changelog": {
+      "startAt": 0,
+      "maxResults": 100,
+      "total": 0,
+      "histories": []
+    }
+  },
+  {
+    "id": "10105",
+    "key": "PROJ-5",
+    "fields": {
+      "project": {
+        "id": "10000",
+        "key": "PROJ"
+      },
+      "summary": "Same-instant double status change",
+      "status": {
+        "id": "10",
+        "name": "완료",
+        "statusCategory": {
+          "id": 3,
+          "key": "done"
+        }
+      },
+      "created": "2026-02-15T09:00:00.000+0900",
+      "updated": "2026-02-20T09:00:00.000+0900"
+    },
+    "changelog": {
+      "startAt": 0,
+      "maxResults": 100,
+      "total": 2,
+      "histories": [
+        {
+          "id": "9005a",
+          "created": "2026-02-18T10:00:00.000+0900",
+          "author": {
+            "key": "asmith",
+            "name": "asmith",
+            "displayName": "Alice Smith"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "To Do",
+              "toString": "개발중",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9005b",
+          "created": "2026-02-18T10:00:00.000+0900",
+          "author": {
+            "key": "asmith",
+            "name": "asmith",
+            "displayName": "Alice Smith"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "개발중",
+              "toString": "완료",
+              "fieldId": "status"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "id": "10106",
+    "key": "PROJ-6",
+    "fields": {
+      "project": {
+        "id": "10000",
+        "key": "PROJ"
+      },
+      "summary": "Status category merge chain",
+      "status": {
+        "id": "10",
+        "name": "완료",
+        "statusCategory": {
+          "id": 3,
+          "key": "done"
+        }
+      },
+      "created": "2026-02-25T09:00:00.000+0900",
+      "updated": "2026-03-01T09:00:00.000+0900"
+    },
+    "changelog": {
+      "startAt": 0,
+      "maxResults": 100,
+      "total": 3,
+      "histories": [
+        {
+          "id": "9006a",
+          "created": "2026-02-26T09:00:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "To Do",
+              "toString": "개발중",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9006b",
+          "created": "2026-02-27T09:00:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "개발중",
+              "toString": "리뷰중",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9006c",
+          "created": "2026-02-28T09:00:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "리뷰중",
+              "toString": "완료"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "id": "10107",
+    "key": "PROJ-7",
+    "fields": {
+      "project": {
+        "id": "10000",
+        "key": "PROJ"
+      },
+      "summary": "Oversized changelog",
+      "status": {
+        "id": "3",
+        "name": "개발중",
+        "statusCategory": {
+          "id": 4,
+          "key": "indeterminate"
+        }
+      },
+      "created": "2026-01-01T00:00:00.000+0900",
+      "updated": "2026-03-10T09:00:00.000+0900"
+    },
+    "changelog": {
+      "startAt": 0,
+      "maxResults": 150,
+      "total": 150,
+      "histories": [
+        {
+          "id": "9007-000",
+          "created": "2026-01-01T00:00:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "To Do",
+              "toString": "개발중",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-001",
+          "created": "2026-01-01T00:01:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "개발중",
+              "toString": "To Do",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-002",
+          "created": "2026-01-01T00:02:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "To Do",
+              "toString": "개발중",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-003",
+          "created": "2026-01-01T00:03:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "개발중",
+              "toString": "To Do",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-004",
+          "created": "2026-01-01T00:04:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "To Do",
+              "toString": "개발중",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-005",
+          "created": "2026-01-01T00:05:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "개발중",
+              "toString": "To Do",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-006",
+          "created": "2026-01-01T00:06:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "To Do",
+              "toString": "개발중",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-007",
+          "created": "2026-01-01T00:07:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "개발중",
+              "toString": "To Do",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-008",
+          "created": "2026-01-01T00:08:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "To Do",
+              "toString": "개발중",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-009",
+          "created": "2026-01-01T00:09:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "개발중",
+              "toString": "To Do",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-010",
+          "created": "2026-01-01T00:10:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "To Do",
+              "toString": "개발중",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-011",
+          "created": "2026-01-01T00:11:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "개발중",
+              "toString": "To Do",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-012",
+          "created": "2026-01-01T00:12:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "To Do",
+              "toString": "개발중",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-013",
+          "created": "2026-01-01T00:13:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "개발중",
+              "toString": "To Do",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-014",
+          "created": "2026-01-01T00:14:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "To Do",
+              "toString": "개발중",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-015",
+          "created": "2026-01-01T00:15:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "개발중",
+              "toString": "To Do",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-016",
+          "created": "2026-01-01T00:16:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "To Do",
+              "toString": "개발중",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-017",
+          "created": "2026-01-01T00:17:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "개발중",
+              "toString": "To Do",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-018",
+          "created": "2026-01-01T00:18:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "To Do",
+              "toString": "개발중",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-019",
+          "created": "2026-01-01T00:19:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "개발중",
+              "toString": "To Do",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-020",
+          "created": "2026-01-01T00:20:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "To Do",
+              "toString": "개발중",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-021",
+          "created": "2026-01-01T00:21:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "개발중",
+              "toString": "To Do",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-022",
+          "created": "2026-01-01T00:22:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "To Do",
+              "toString": "개발중",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-023",
+          "created": "2026-01-01T00:23:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "개발중",
+              "toString": "To Do",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-024",
+          "created": "2026-01-01T00:24:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "To Do",
+              "toString": "개발중",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-025",
+          "created": "2026-01-01T00:25:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "개발중",
+              "toString": "To Do",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-026",
+          "created": "2026-01-01T00:26:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "To Do",
+              "toString": "개발중",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-027",
+          "created": "2026-01-01T00:27:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "개발중",
+              "toString": "To Do",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-028",
+          "created": "2026-01-01T00:28:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "To Do",
+              "toString": "개발중",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-029",
+          "created": "2026-01-01T00:29:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "개발중",
+              "toString": "To Do",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-030",
+          "created": "2026-01-01T00:30:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "To Do",
+              "toString": "개발중",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-031",
+          "created": "2026-01-01T00:31:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "개발중",
+              "toString": "To Do",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-032",
+          "created": "2026-01-01T00:32:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "To Do",
+              "toString": "개발중",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-033",
+          "created": "2026-01-01T00:33:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "개발중",
+              "toString": "To Do",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-034",
+          "created": "2026-01-01T00:34:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "To Do",
+              "toString": "개발중",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-035",
+          "created": "2026-01-01T00:35:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "개발중",
+              "toString": "To Do",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-036",
+          "created": "2026-01-01T00:36:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "To Do",
+              "toString": "개발중",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-037",
+          "created": "2026-01-01T00:37:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "개발중",
+              "toString": "To Do",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-038",
+          "created": "2026-01-01T00:38:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "To Do",
+              "toString": "개발중",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-039",
+          "created": "2026-01-01T00:39:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "개발중",
+              "toString": "To Do",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-040",
+          "created": "2026-01-01T00:40:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "To Do",
+              "toString": "개발중",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-041",
+          "created": "2026-01-01T00:41:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "개발중",
+              "toString": "To Do",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-042",
+          "created": "2026-01-01T00:42:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "To Do",
+              "toString": "개발중",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-043",
+          "created": "2026-01-01T00:43:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "개발중",
+              "toString": "To Do",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-044",
+          "created": "2026-01-01T00:44:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "To Do",
+              "toString": "개발중",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-045",
+          "created": "2026-01-01T00:45:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "개발중",
+              "toString": "To Do",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-046",
+          "created": "2026-01-01T00:46:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "To Do",
+              "toString": "개발중",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-047",
+          "created": "2026-01-01T00:47:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "개발중",
+              "toString": "To Do",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-048",
+          "created": "2026-01-01T00:48:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "To Do",
+              "toString": "개발중",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-049",
+          "created": "2026-01-01T00:49:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "개발중",
+              "toString": "To Do",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-050",
+          "created": "2026-01-01T00:50:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "To Do",
+              "toString": "개발중",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-051",
+          "created": "2026-01-01T00:51:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "개발중",
+              "toString": "To Do",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-052",
+          "created": "2026-01-01T00:52:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "To Do",
+              "toString": "개발중",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-053",
+          "created": "2026-01-01T00:53:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "개발중",
+              "toString": "To Do",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-054",
+          "created": "2026-01-01T00:54:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "To Do",
+              "toString": "개발중",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-055",
+          "created": "2026-01-01T00:55:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "개발중",
+              "toString": "To Do",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-056",
+          "created": "2026-01-01T00:56:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "To Do",
+              "toString": "개발중",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-057",
+          "created": "2026-01-01T00:57:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "개발중",
+              "toString": "To Do",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-058",
+          "created": "2026-01-01T00:58:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "To Do",
+              "toString": "개발중",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-059",
+          "created": "2026-01-01T00:59:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "개발중",
+              "toString": "To Do",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-060",
+          "created": "2026-01-01T01:00:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "To Do",
+              "toString": "개발중",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-061",
+          "created": "2026-01-01T01:01:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "개발중",
+              "toString": "To Do",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-062",
+          "created": "2026-01-01T01:02:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "To Do",
+              "toString": "개발중",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-063",
+          "created": "2026-01-01T01:03:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "개발중",
+              "toString": "To Do",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-064",
+          "created": "2026-01-01T01:04:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "To Do",
+              "toString": "개발중",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-065",
+          "created": "2026-01-01T01:05:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "개발중",
+              "toString": "To Do",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-066",
+          "created": "2026-01-01T01:06:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "To Do",
+              "toString": "개발중",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-067",
+          "created": "2026-01-01T01:07:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "개발중",
+              "toString": "To Do",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-068",
+          "created": "2026-01-01T01:08:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "To Do",
+              "toString": "개발중",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-069",
+          "created": "2026-01-01T01:09:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "개발중",
+              "toString": "To Do",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-070",
+          "created": "2026-01-01T01:10:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "To Do",
+              "toString": "개발중",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-071",
+          "created": "2026-01-01T01:11:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "개발중",
+              "toString": "To Do",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-072",
+          "created": "2026-01-01T01:12:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "To Do",
+              "toString": "개발중",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-073",
+          "created": "2026-01-01T01:13:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "개발중",
+              "toString": "To Do",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-074",
+          "created": "2026-01-01T01:14:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "To Do",
+              "toString": "개발중",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-075",
+          "created": "2026-01-01T01:15:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "개발중",
+              "toString": "To Do",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-076",
+          "created": "2026-01-01T01:16:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "To Do",
+              "toString": "개발중",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-077",
+          "created": "2026-01-01T01:17:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "개발중",
+              "toString": "To Do",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-078",
+          "created": "2026-01-01T01:18:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "To Do",
+              "toString": "개발중",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-079",
+          "created": "2026-01-01T01:19:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "개발중",
+              "toString": "To Do",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-080",
+          "created": "2026-01-01T01:20:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "To Do",
+              "toString": "개발중",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-081",
+          "created": "2026-01-01T01:21:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "개발중",
+              "toString": "To Do",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-082",
+          "created": "2026-01-01T01:22:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "To Do",
+              "toString": "개발중",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-083",
+          "created": "2026-01-01T01:23:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "개발중",
+              "toString": "To Do",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-084",
+          "created": "2026-01-01T01:24:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "To Do",
+              "toString": "개발중",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-085",
+          "created": "2026-01-01T01:25:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "개발중",
+              "toString": "To Do",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-086",
+          "created": "2026-01-01T01:26:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "To Do",
+              "toString": "개발중",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-087",
+          "created": "2026-01-01T01:27:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "개발중",
+              "toString": "To Do",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-088",
+          "created": "2026-01-01T01:28:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "To Do",
+              "toString": "개발중",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-089",
+          "created": "2026-01-01T01:29:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "개발중",
+              "toString": "To Do",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-090",
+          "created": "2026-01-01T01:30:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "To Do",
+              "toString": "개발중",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-091",
+          "created": "2026-01-01T01:31:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "개발중",
+              "toString": "To Do",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-092",
+          "created": "2026-01-01T01:32:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "To Do",
+              "toString": "개발중",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-093",
+          "created": "2026-01-01T01:33:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "개발중",
+              "toString": "To Do",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-094",
+          "created": "2026-01-01T01:34:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "To Do",
+              "toString": "개발중",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-095",
+          "created": "2026-01-01T01:35:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "개발중",
+              "toString": "To Do",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-096",
+          "created": "2026-01-01T01:36:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "To Do",
+              "toString": "개발중",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-097",
+          "created": "2026-01-01T01:37:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "개발중",
+              "toString": "To Do",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-098",
+          "created": "2026-01-01T01:38:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "To Do",
+              "toString": "개발중",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-099",
+          "created": "2026-01-01T01:39:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "개발중",
+              "toString": "To Do",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-100",
+          "created": "2026-01-01T01:40:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "To Do",
+              "toString": "개발중",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-101",
+          "created": "2026-01-01T01:41:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "개발중",
+              "toString": "To Do",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-102",
+          "created": "2026-01-01T01:42:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "To Do",
+              "toString": "개발중",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-103",
+          "created": "2026-01-01T01:43:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "개발중",
+              "toString": "To Do",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-104",
+          "created": "2026-01-01T01:44:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "To Do",
+              "toString": "개발중",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-105",
+          "created": "2026-01-01T01:45:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "개발중",
+              "toString": "To Do",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-106",
+          "created": "2026-01-01T01:46:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "To Do",
+              "toString": "개발중",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-107",
+          "created": "2026-01-01T01:47:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "개발중",
+              "toString": "To Do",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-108",
+          "created": "2026-01-01T01:48:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "To Do",
+              "toString": "개발중",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-109",
+          "created": "2026-01-01T01:49:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "개발중",
+              "toString": "To Do",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-110",
+          "created": "2026-01-01T01:50:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "To Do",
+              "toString": "개발중",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-111",
+          "created": "2026-01-01T01:51:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "개발중",
+              "toString": "To Do",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-112",
+          "created": "2026-01-01T01:52:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "To Do",
+              "toString": "개발중",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-113",
+          "created": "2026-01-01T01:53:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "개발중",
+              "toString": "To Do",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-114",
+          "created": "2026-01-01T01:54:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "To Do",
+              "toString": "개발중",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-115",
+          "created": "2026-01-01T01:55:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "개발중",
+              "toString": "To Do",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-116",
+          "created": "2026-01-01T01:56:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "To Do",
+              "toString": "개발중",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-117",
+          "created": "2026-01-01T01:57:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "개발중",
+              "toString": "To Do",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-118",
+          "created": "2026-01-01T01:58:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "To Do",
+              "toString": "개발중",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-119",
+          "created": "2026-01-01T01:59:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "개발중",
+              "toString": "To Do",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-120",
+          "created": "2026-01-01T02:00:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "To Do",
+              "toString": "개발중",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-121",
+          "created": "2026-01-01T02:01:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "개발중",
+              "toString": "To Do",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-122",
+          "created": "2026-01-01T02:02:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "To Do",
+              "toString": "개발중",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-123",
+          "created": "2026-01-01T02:03:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "개발중",
+              "toString": "To Do",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-124",
+          "created": "2026-01-01T02:04:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "To Do",
+              "toString": "개발중",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-125",
+          "created": "2026-01-01T02:05:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "개발중",
+              "toString": "To Do",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-126",
+          "created": "2026-01-01T02:06:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "To Do",
+              "toString": "개발중",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-127",
+          "created": "2026-01-01T02:07:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "개발중",
+              "toString": "To Do",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-128",
+          "created": "2026-01-01T02:08:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "To Do",
+              "toString": "개발중",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-129",
+          "created": "2026-01-01T02:09:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "개발중",
+              "toString": "To Do",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-130",
+          "created": "2026-01-01T02:10:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "To Do",
+              "toString": "개발중",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-131",
+          "created": "2026-01-01T02:11:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "개발중",
+              "toString": "To Do",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-132",
+          "created": "2026-01-01T02:12:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "To Do",
+              "toString": "개발중",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-133",
+          "created": "2026-01-01T02:13:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "개발중",
+              "toString": "To Do",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-134",
+          "created": "2026-01-01T02:14:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "To Do",
+              "toString": "개발중",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-135",
+          "created": "2026-01-01T02:15:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "개발중",
+              "toString": "To Do",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-136",
+          "created": "2026-01-01T02:16:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "To Do",
+              "toString": "개발중",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-137",
+          "created": "2026-01-01T02:17:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "개발중",
+              "toString": "To Do",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-138",
+          "created": "2026-01-01T02:18:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "To Do",
+              "toString": "개발중",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-139",
+          "created": "2026-01-01T02:19:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "개발중",
+              "toString": "To Do",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-140",
+          "created": "2026-01-01T02:20:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "To Do",
+              "toString": "개발중",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-141",
+          "created": "2026-01-01T02:21:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "개발중",
+              "toString": "To Do",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-142",
+          "created": "2026-01-01T02:22:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "To Do",
+              "toString": "개발중",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-143",
+          "created": "2026-01-01T02:23:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "개발중",
+              "toString": "To Do",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-144",
+          "created": "2026-01-01T02:24:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "To Do",
+              "toString": "개발중",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-145",
+          "created": "2026-01-01T02:25:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "개발중",
+              "toString": "To Do",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-146",
+          "created": "2026-01-01T02:26:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "To Do",
+              "toString": "개발중",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-147",
+          "created": "2026-01-01T02:27:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "개발중",
+              "toString": "To Do",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-148",
+          "created": "2026-01-01T02:28:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "To Do",
+              "toString": "개발중",
+              "fieldId": "status"
+            }
+          ]
+        },
+        {
+          "id": "9007-149",
+          "created": "2026-01-01T02:29:00.000+0900",
+          "author": {
+            "key": "jdoe",
+            "name": "jdoe",
+            "displayName": "Jane Doe"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "개발중",
+              "toString": "To Do",
+              "fieldId": "status"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "id": "10108",
+    "key": "PROJ-8",
+    "fields": {
+      "project": {
+        "id": "10000",
+        "key": "PROJ"
+      },
+      "summary": "No time tracking used",
+      "status": {
+        "id": "10",
+        "name": "완료",
+        "statusCategory": {
+          "id": 3,
+          "key": "done"
+        }
+      },
+      "created": "2026-03-05T09:00:00.000+0900",
+      "updated": "2026-03-20T09:00:00.000+0900",
+      "timespent": null,
+      "duedate": null
+    },
+    "changelog": {
+      "startAt": 0,
+      "maxResults": 100,
+      "total": 1,
+      "histories": [
+        {
+          "id": "9008",
+          "created": "2026-03-15T09:00:00.000+0900",
+          "author": {
+            "key": "asmith",
+            "name": "asmith",
+            "displayName": "Alice Smith"
+          },
+          "items": [
+            {
+              "field": "status",
+              "fromString": "개발중",
+              "toString": "완료",
+              "fieldId": "status"
+            }
+          ]
+        }
+      ]
+    }
+  }
+]
