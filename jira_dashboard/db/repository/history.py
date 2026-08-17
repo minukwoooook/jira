@@ -1,6 +1,6 @@
 import logging
 
-from jira_dashboard.jira.models import MAX_CHANGELOG_STR_BYTES
+from jira_dashboard.jira.models import MAX_CHANGELOG_STR_BYTES, ChangelogItem
 from jira_dashboard.jira.parser import truncate
 
 log = logging.getLogger(__name__)
@@ -88,3 +88,115 @@ def upsert_changelog(conn, issue_id: int, items,
     if rows:
         conn.cursor().executemany(_MERGE_CHANGELOG, rows, batcherrors=False)
     return unresolved
+
+
+_SELECT_DIMENSION_FIELDS = """
+SELECT field_id, field_pk FROM test_jira_field
+WHERE  instance_id = :instance_id AND is_dimension = 'Y'
+"""
+
+_SELECT_STATUS_CATEGORIES = """
+SELECT DISTINCT status_name, status_category FROM test_jira_issue
+WHERE  instance_id = :instance_id AND status_name IS NOT NULL
+"""
+
+_SELECT_ISSUE_STATES = """
+SELECT issue_id, created_at, status_name FROM test_jira_issue
+WHERE  issue_id IN ({placeholders})
+"""
+
+_SELECT_CHANGES = """
+SELECT c.issue_id, c.jira_history_id, c.item_seq, c.changed_at,
+       f.field_id, c.field_name, c.from_id, c.from_str, c.to_id, c.to_str
+FROM   test_issue_changelog c
+LEFT   JOIN test_jira_field f ON f.field_pk = c.field_pk
+WHERE  c.issue_id IN ({placeholders})
+ORDER  BY c.issue_id, c.changed_at, c.item_seq
+"""
+
+_DELETE_HISTORY = "DELETE FROM test_issue_field_history WHERE issue_id = :issue_id"
+
+_INSERT_HISTORY = """
+INSERT INTO test_issue_field_history
+       (issue_id, field_pk, valid_from, valid_to, val_str, val_id)
+VALUES (:issue_id, :field_pk, :valid_from, :valid_to, :val_str, :val_id)
+"""
+
+_MERGE_FIRST_DONE = """
+MERGE INTO test_jira_issue t
+USING (
+  SELECT h.issue_id, MIN(h.valid_from) AS first_done_at
+  FROM   test_issue_field_history h
+  JOIN   test_jira_field f ON f.field_pk = h.field_pk
+                          AND f.field_id = 'status_category'
+  WHERE  h.val_str = 'done' AND h.issue_id IN ({placeholders})
+  GROUP  BY h.issue_id
+) s ON (t.issue_id = s.issue_id)
+WHEN MATCHED THEN UPDATE SET t.first_done_at = s.first_done_at
+"""
+
+
+def _binds(issue_ids: list[int]) -> tuple[str, dict]:
+    binds = {f"b{i}": v for i, v in enumerate(issue_ids)}
+    return ", ".join(f":{k}" for k in binds), binds
+
+
+def dimension_field_pks(conn, instance_id: int) -> dict[str, int]:
+    cur = conn.cursor()
+    cur.execute(_SELECT_DIMENSION_FIELDS, instance_id=instance_id)
+    return {f: pk for f, pk in cur.fetchall()}
+
+
+def status_category_map(conn, instance_id: int) -> dict[str, str]:
+    """이미 적재된 이슈에서 상태명 → 카테고리 대응을 만든다.
+
+    /rest/api/2/status 를 다시 부르지 않아도 되게 DB에서 뽑는다. 아직 본 적 없는
+    상태는 merge_categories에서 'undefined'로 떨어진다. 워크플로우에서 이미 빠진
+    상태(현재 어느 이슈도 갖고 있지 않은 상태)는 여기 없다 — derive_history의
+    category_of 파라미터로 /rest/api/2/status 기반 맵을 넘기면 우회된다
+    (Correction 3).
+    """
+    cur = conn.cursor()
+    cur.execute(_SELECT_STATUS_CATEGORIES, instance_id=instance_id)
+    return {name: cat for name, cat in cur.fetchall()}
+
+
+def load_issue_states(conn, issue_ids: list[int]) -> dict[int, dict]:
+    placeholders, binds = _binds(issue_ids)
+    cur = conn.cursor()
+    cur.execute(_SELECT_ISSUE_STATES.format(placeholders=placeholders), **binds)
+    return {
+        iid: {"created_at": created, "current_values": {"status": (status, None)}}
+        for iid, created, status in cur.fetchall()
+    }
+
+
+def load_changes(conn, issue_ids: list[int]) -> dict[int, list[ChangelogItem]]:
+    placeholders, binds = _binds(issue_ids)
+    cur = conn.cursor()
+    cur.execute(_SELECT_CHANGES.format(placeholders=placeholders), **binds)
+    out: dict[int, list[ChangelogItem]] = {}
+    for (iid, hid, seq, at, field_id, field_name,
+         from_id, from_str, to_id, to_str) in cur.fetchall():
+        out.setdefault(iid, []).append(ChangelogItem(
+            history_id=hid, item_seq=seq, author_user_key=None,
+            author_display_name=None, changed_at=at, field_name=field_name,
+            field_id=field_id, from_id=from_id, from_str=from_str,
+            to_id=to_id, to_str=to_str,
+        ))
+    return out
+
+
+def replace_history(conn, issue_id: int, rows: list[dict]) -> None:
+    """부분 갱신하지 않는다. 이슈 단위로 지우고 다시 넣는다 (spec §5.3)."""
+    cur = conn.cursor()
+    cur.execute(_DELETE_HISTORY, issue_id=issue_id)
+    if rows:
+        cur.executemany(_INSERT_HISTORY, rows, batcherrors=False)
+
+
+def update_first_done_at(conn, issue_ids: list[int]) -> int:
+    placeholders, binds = _binds(issue_ids)
+    cur = conn.cursor()
+    cur.execute(_MERGE_FIRST_DONE.format(placeholders=placeholders), **binds)
+    return cur.rowcount
