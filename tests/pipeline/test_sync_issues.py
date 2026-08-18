@@ -196,7 +196,7 @@ def test_iter_pages_stops_on_zero_progress(fake_jira):
         def search_issues(self, jql, start_at, max_results, expand_changelog):
             return stuck_page
 
-    pages = list(mod._iter_pages(_ZeroProgressClient(), "whatever", 100))
+    pages = list(mod.iter_search_pages(_ZeroProgressClient(), "whatever", 100))
     assert len(pages) == 1
 
 
@@ -412,3 +412,72 @@ def test_payload_hash_is_stable_across_pipeline_runs(monkeypatch, fake_jira):
     # This is the assertion that cannot pass if someone reverts to hashing gzip output.
     for row in rows_1:
         assert row["payload_hash"] != issue_repo.sha256_hex(row["payload"])
+
+
+# --- C1: dry-run은 절대 커밋하지 않는다 -------------------------------------
+
+def _commit_recording_rec(monkeypatch):
+    """rec 픽스처와 같은 스텁 + conn.commit 호출을 기록한다."""
+    r = Recorder()
+    r.returns["load_existing"] = lambda *a, **k: {}
+    r.returns["next_issue_ids"] = lambda conn, n: list(range(9000, 9000 + n))
+    r.patch(monkeypatch, mod.issue_repo,
+            "load_existing", "next_issue_ids", "upsert_issues", "touch_synced_at",
+            "upsert_raw", "replace_field_values")
+    r.patch(monkeypatch, mod.history_repo, "upsert_changelog")
+    monkeypatch.setattr(mod, "field_pk_by_field_id", lambda conn, i: FIELD_PKS)
+    monkeypatch.setattr(mod, "field_pk_by_field_name", lambda conn, i: {})
+    commits = []
+    monkeypatch.setattr(CONN, "commit", lambda: commits.append(1), raising=False)
+    return r, commits
+
+
+def test_dry_run_never_commits(monkeypatch, fake_jira):
+    """C1: README는 dry-run이 프로덕션에 안전하다고 말하는데, sync_issues가 페이지마다
+    커밋하고 db_conn이 종료 시 한 번 더 커밋해서 runner의 rollback()은 이미 커밋된
+    데이터 위의 no-op이었다. runner 테스트는 sync_issues를 스텁하므로 이걸 잡을 수
+    없다 — 진짜 sync_issues를 돌려야 한다."""
+    _, commits = _commit_recording_rec(monkeypatch)
+    result = mod.sync_issues(CONN, fake_jira, 1, 7, "PROJ", None, dry_run=True)
+
+    assert commits == [], "dry-run에서 conn.commit()이 한 번이라도 불리면 안 된다"
+    assert result.upserted > 0, "쓰기 자체는 실행돼야 한다 (호출자가 롤백한다)"
+
+
+def test_normal_run_still_commits_each_page(monkeypatch, fake_jira):
+    """반대 방향도 고정한다 — dry_run 플래그가 항상 참이 되어버리면 증분 수집이
+    한 트랜잭션으로 부풀어 undo를 터뜨린다."""
+    _, commits = _commit_recording_rec(monkeypatch)
+    mod.sync_issues(CONN, fake_jira, 1, 7, "PROJ", None)
+    assert commits, "정상 실행은 페이지마다 커밋해야 한다"
+
+
+def test_page_size_above_the_in_list_limit_is_rejected():
+    """load_existing이 페이지 전체를 IN 리스트로 조회하므로 1000을 넘으면 ORA-01795다."""
+    with pytest.raises(ValueError, match="1000"):
+        mod.sync_issues(CONN, None, 1, 7, "PROJ", None, page_size=1001)
+
+
+# --- C4: 전체 재수집은 해시 비교를 우회한다 ----------------------------------
+
+def test_full_resync_bypasses_the_payload_hash(monkeypatch, fake_jira):
+    """R31: derive_history가 터진 다음 실행은 해시가 같아 전부 스킵하고 이력을
+    만들지 않은 채 SUCCESS를 보고했다. full_resync_requested='Y'는 워터마크만
+    비웠으므로 전체 재수집으로도 복구되지 않았다 — 해시 자체를 우회해야 한다."""
+    first, second, skipped_result = _sync_twice_with_matching_hashes(
+        monkeypatch, fake_jira
+    )
+    assert skipped_result.upserted == 0        # 해시가 같으면 평소엔 전부 스킵
+
+    third = Recorder()
+    third.returns["load_existing"] = second.returns["load_existing"]
+    third.returns["next_issue_ids"] = lambda conn, n: list(range(7000, 7000 + n))
+    third.patch(monkeypatch, mod.issue_repo,
+                "load_existing", "next_issue_ids", "upsert_issues",
+                "touch_synced_at", "upsert_raw", "replace_field_values")
+    third.patch(monkeypatch, mod.history_repo, "upsert_changelog")
+    result = mod.sync_issues(CONN, fake_jira, 1, 7, "PROJ", None, full_resync=True)
+
+    assert result.skipped == 0
+    assert result.upserted == skipped_result.skipped > 0
+    assert result.changed_issue_ids, "재수집이 이력 파생 대상을 다시 넘겨줘야 한다"

@@ -1,0 +1,5 @@
+# 테스트 의존성. 런타임(requirements.txt)과 분리해 둔다 — 사내 서버에 pytest를
+# 강제 설치하지 않기 위해서이고, 런북 7단계(JIRA_FIXTURES=captured pytest)는
+# 이 파일이 있어야 성립한다 (spec §11.7).
+-r requirements.txt
+pytest==9.1.1

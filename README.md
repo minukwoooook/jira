@@ -20,9 +20,33 @@ python -m jira_dashboard.cli capture --instance SITE_A --project PROJ [--limit N
 ```
 
 `sync --dry-run` rolls back every write and never advances the watermark —
-safe to run against production before the first real sync. `--daily` also
-runs field profiling and delete/move detection; run it once a day, not
-every hour.
+safe to run against production before the first real sync. It is safe
+because the connection handed to a dry run refuses to commit
+(`db_conn(read_only=True)` → `ReadOnlyConnection`) and `sync_issues`
+skips its per-page commit; both are needed, since either commit alone
+would make the rollback a no-op over already-committed data. Combine it
+with `--project` so the rolled-back transaction stays small. `--daily`
+also runs field profiling and delete/move detection; run it once a day,
+not every hour.
+
+`sync --project KEY` limits the run to one enabled project — the staged
+rollout in `docs/design.md` §11.7 (steps 8-11) depends on it.
+
+## Offline install (on-premise)
+
+Transfer is one-way via git, so the wheel bundle must be **tracked**:
+`vendor/` is in `.gitignore` (so stray local wheels are never committed
+by accident) and committed with `git add -f vendor/`. A fresh on-premise
+clone therefore needs nothing but the clone itself:
+
+```
+pip install --no-index --find-links vendor/ -r requirements-dev.txt
+```
+
+`requirements.txt` is runtime only; `requirements-dev.txt` adds `pytest`,
+which runbook step 7 (`JIRA_FIXTURES=captured pytest`) requires. Rebuild
+the bundle with `make vendor` and prove it installs offline with
+`make verify-vendor`.
 
 ## Cron registration
 

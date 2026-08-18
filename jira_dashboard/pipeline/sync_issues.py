@@ -40,10 +40,14 @@ def next_watermark(max_updated: datetime | None,
     return max_updated - OVERLAP
 
 
-def _iter_pages(client: JiraClient, jql: str, page_size: int):
+def iter_search_pages(client: JiraClient, jql: str, page_size: int,
+                      *, expand_changelog: bool = True):
+    """startAt 페이징의 유일한 구현. detect_deleted도 이걸 쓴다 — 두 번째 구현은
+    무진행 가드를 빠뜨렸다 (Item 12)."""
     start_at = 0
     while True:
-        page = client.search_issues(jql, start_at, page_size, True)
+        page = client.search_issues(jql, start_at, page_size,
+                                    expand_changelog)
         if not page.issues:
             return
         yield page
@@ -87,7 +91,21 @@ def _full_changelog(client: JiraClient, raw_issue: dict) -> tuple[list[dict], bo
 
 def sync_issues(conn, client: JiraClient, instance_id: int, project_id: int,
                 project_key: str, since: datetime | None,
-                *, page_size: int = 100) -> SyncResult:
+                *, page_size: int = 100, dry_run: bool = False,
+                full_resync: bool = False) -> SyncResult:
+    """dry_run=True면 커밋하지 않는다 — 쓰기는 그대로 실행하고 호출자가 롤백한다.
+
+    full_resync=True면 payload_hash 비교를 건너뛴다. 해시 스킵은 "payload가 그대로니
+    하위 단계도 다시 할 필요가 없다"는 주장인데, 그건 하위 단계(derive_history)가
+    실제로 성공했을 때만 참이다. 프로젝트가 실패하면 러너가 full_resync_requested를
+    'Y'로 올리고, 그 다음 실행이 이 플래그로 해시를 우회해 이력을 다시 만든다 (R31).
+    """
+    if page_size > 1000:
+        # load_existing이 jira_issue_id IN (:b0...)로 페이지 전체를 한 번에 조회한다.
+        # Oracle IN 리스트 상한이 표현식 1000개이므로(ORA-01795) 그 위는 즉시 깨진다.
+        raise ValueError(
+            f"page_size must be <= 1000 (Oracle IN-list limit); got {page_size}"
+        )
     field_index = {fd.field_id: fd for fd in parse_field_defs(client.get_fields())}
     category_of = {s["name"]: s["statusCategory"]["key"] for s in client.get_statuses()}
     field_pks = field_pk_by_field_id(conn, instance_id)
@@ -97,7 +115,7 @@ def sync_issues(conn, client: JiraClient, instance_id: int, project_id: int,
     jql = build_jql(project_key, since)
     unresolved_field_names: set[str] = set()
 
-    for page in _iter_pages(client, jql, page_size):
+    for page in iter_search_pages(client, jql, page_size):
         result.fetched += len(page.issues)
         jira_ids = [str(i["id"]) for i in page.issues]
 
@@ -117,7 +135,8 @@ def sync_issues(conn, client: JiraClient, instance_id: int, project_id: int,
             digest = issue_repo.sha256_hex(raw_bytes)
             payload = issue_repo.gzip_bytes(raw_bytes)
             prior = existing.get(jid)
-            if prior is not None and prior.payload_hash == digest:
+            if (not full_resync and prior is not None
+                    and prior.payload_hash == digest):
                 unchanged_ids.append(prior.issue_id)
                 continue
             pending.append((raw, payload, digest, prior))
@@ -199,7 +218,8 @@ def sync_issues(conn, client: JiraClient, instance_id: int, project_id: int,
 
         result.upserted += len(issue_rows)
         result.changed_issue_ids.extend(r["issue_id"] for r in issue_rows)
-        conn.commit()
+        if not dry_run:
+            conn.commit()
 
     if unresolved_field_names:
         # 개별 행마다 찍으면 이슈 10만 건에서 로그가 터진다 — 서로 다른 필드 이름만

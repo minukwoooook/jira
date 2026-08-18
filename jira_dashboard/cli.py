@@ -2,11 +2,6 @@ import argparse
 import logging
 import sys
 
-SELECT_INSTANCE = """
-SELECT instance_id, base_url, auth_type, secret_ref
-FROM   test_jira_instance WHERE instance_key = :instance_key
-"""
-
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="jira_dashboard")
@@ -14,6 +9,9 @@ def _build_parser() -> argparse.ArgumentParser:
 
     sync = sub.add_parser("sync", help="run the collection pipeline")
     sync.add_argument("--instance", required=True, help="instance_key")
+    sync.add_argument("--project",
+                      help="limit the run to one enabled project key "
+                           "(staged rollout, spec 11.7 steps 8-11)")
     sync.add_argument("--dry-run", action="store_true")
     sync.add_argument("--daily", action="store_true",
                       help="also run profiling and delete detection")
@@ -36,11 +34,10 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def _client_for(conn, instance_key: str):
+    from jira_dashboard.db.repository.catalog import instance_config
     from jira_dashboard.jira.client import HttpJiraClient
 
-    cur = conn.cursor()
-    cur.execute(SELECT_INSTANCE, instance_key=instance_key)
-    row = cur.fetchone()
+    row = instance_config(conn, instance_key)
     if row is None:
         raise SystemExit(f"unknown instance: {instance_key}")
     instance_id, base_url, auth_type, secret_ref = row
@@ -57,17 +54,20 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "sync":
         from jira_dashboard.pipeline.runner import run_instance
 
-        with db_conn() as conn:
+        # --dry-run은 commit을 삼키는 커넥션을 받는다 (C1). 이 플래그가 없으면
+        # db_conn이 종료 시 커밋해 "롤백한다"는 약속이 무의미해진다.
+        with db_conn(read_only=args.dry_run) as conn:
             instance_id, client = _client_for(conn, args.instance)
             summary = run_instance(conn, client, instance_id,
-                                   dry_run=args.dry_run, daily=args.daily)
+                                   dry_run=args.dry_run, daily=args.daily,
+                                   project=args.project)
         print(f"ok={summary.projects_ok} failed={summary.projects_failed} "
               f"upserted={summary.issues_upserted} "
               f"parse_failures={summary.parse_failures} "
               f"changelog_truncated={summary.changelog_truncated}")
         for key, err in summary.errors.items():
             print(f"  {key}: {err}")
-        return 1 if summary.projects_failed else 0
+        return 1 if (summary.projects_failed or summary.steps_failed) else 0
 
     if args.command == "doctor":
         from jira_dashboard.doctor.db_checks import format_report, run_db_checks

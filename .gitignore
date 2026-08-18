@@ -1,6 +1,8 @@
 __pycache__/
 *.pyc
 .env
+# 로컬에서 받은 휠이 실수로 커밋되지 않게 무시하되, 반입용 번들은
+# `git add -f vendor/`로 명시적으로 추적한다 (spec §11.4는 git 단방향 반입이다).
 vendor/
 tests/fixtures/captured/
 .superpowers/

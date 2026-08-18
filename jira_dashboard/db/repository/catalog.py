@@ -14,6 +14,11 @@ WHEN NOT MATCHED THEN
   VALUES (:instance_key, :base_url, :auth_type, :secret_ref)
 """
 
+_SELECT_INSTANCE_CONFIG = """
+SELECT instance_id, base_url, auth_type, secret_ref
+FROM   test_jira_instance WHERE instance_key = :instance_key
+"""
+
 _SELECT_INSTANCE_ID = """
 SELECT instance_id FROM test_jira_instance WHERE instance_key = :instance_key
 """
@@ -105,6 +110,18 @@ def upsert_instance(conn, instance_key, base_url, auth_type, secret_ref) -> int:
                 auth_type=auth_type, secret_ref=secret_ref)
     cur.execute(_SELECT_INSTANCE_ID, instance_key=instance_key)
     return cur.fetchone()[0]
+
+
+def instance_config(conn, instance_key: str) -> tuple | None:
+    """(instance_id, base_url, auth_type, secret_ref). 없으면 None.
+
+    cli가 직접 들고 있던 유일한 SQL이었다 — 정적 게이트가 스캔하는 세 패키지
+    밖이라 컬럼명 대조를 전혀 받지 못했는데, 모든 명령이 이걸 먼저 실행한다
+    (Item 14).
+    """
+    cur = conn.cursor()
+    cur.execute(_SELECT_INSTANCE_CONFIG, instance_key=instance_key)
+    return cur.fetchone()
 
 
 def upsert_projects(conn, instance_id: int, projects: list[dict]) -> list[int]:

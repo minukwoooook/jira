@@ -1964,7 +1964,10 @@ cli capture --project TEST --limit 200
 순서가 중요하다. **읽기 전용 검사를 통과한 뒤에 DDL을 돌리고, DDL이 끝난 뒤에 코드를 돌린다.**
 
 ```
- 1. pip install --no-index --find-links vendor/ -r requirements.txt
+ 1. pip install --no-index --find-links vendor/ -r requirements-dev.txt
+                                      vendor/는 .gitignore되어 있지만 `git add -f`로
+                                      추적된다 — 반입이 git 단방향이므로 (11.4절).
+                                      dev 쪽을 쓰는 이유는 7단계가 pytest를 요구해서다
  2. cli doctor --db --skip-schema     읽기 전용. 버전·권한·타임존·쿼터만 본다
                                       (테이블이 아직 없으므로 스키마 대조는 건너뛴다)
  ────── 권한이 부족하면 여기서 멈춘다 ──────
@@ -1974,7 +1977,7 @@ cli capture --project TEST --limit 200
  ────── FAIL이 있으면 사외로 돌아가 고친다 ──────
  6. cli capture --project TEST --limit 200
  7. JIRA_FIXTURES=captured pytest     사외 스위트를 실데이터로 재실행
- 8. cli sync --project TEST --dry-run 파싱만, DB 쓰기 없음
+ 8. cli sync --project TEST --dry-run MERGE/INSERT까지 실제로 실행하되 커밋하지 않는다
  9. cli sync --project TEST           첫 실제 수집 — SQL이 처음 실행되는 순간
 10. cli sync --project TEST           2회차 — 행 수 불변(멱등)
 11. cli sync --project TEST           3회차 — 동일
@@ -1982,7 +1985,9 @@ cli capture --project TEST --limit 200
 ```
 
 **9단계가 이 프로젝트에서 가장 위험한 순간이다.** 사외에 DB가 없었으므로 모든 `MERGE`·`INSERT`
-문이 여기서 처음 실행된다. 실패하면 대개 원인이 셋 중 하나다.
+문이 8~9단계에서 처음 실행된다 — 8단계(`--dry-run`)는 문장을 실제로 실행하지만 커밋하지
+않으므로 문법·컬럼명·FK 오류는 거기서 먼저 드러나고, 9단계는 그것이 처음 **커밋**되는
+순간이다. 그래서 8단계를 건너뛰지 않는다. 실패하면 대개 원인이 셋 중 하나다.
 
 | 증상 | 원인 | 확인 |
 |---|---|---|
