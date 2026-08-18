@@ -110,6 +110,13 @@ def run_instance(conn, client, instance_id: int, *,
             summary.issues_upserted += result.upserted
         except JiraAuthError:
             conn.rollback()
+            # 인증 실패도 이 프로젝트에 한해서는 일반 실패와 같다 — sync_issues가
+            # 이미 페이지를 커밋했을 수 있으니 워터마크를 전진시키지 않고 전체
+            # 재수집을 요청해야 다음 실행이 이력 파생 없는 SUCCESS로 조용히
+            # 끝나지 않는다 (R31).
+            sync_repo.write_watermark(conn, project_id, None, "FAILED")
+            sync_repo.request_full_resync(conn, project_id)
+            conn.commit()
             sync_repo.finish_run(conn, run_id, "FAILED", error="auth failed")
             raise
         except Exception as exc:

@@ -114,7 +114,18 @@ def test_auth_error_aborts_the_whole_instance(monkeypatch, rec):
     )
     with pytest.raises(JiraAuthError):
         mod.run_instance(CONN, FakeClient(), 1)
-    assert rec.count("write_watermark") == 0
+    payload = rec.first("write_watermark")
+    assert payload["args"][1] is None      # since=None → NVL로 기존값 유지
+    assert payload["args"][2] == "FAILED"
+
+
+def test_auth_error_queues_full_resync(monkeypatch, rec):
+    monkeypatch.setattr(
+        mod, "sync_issues", lambda *a, **k: (_ for _ in ()).throw(JiraAuthError("401"))
+    )
+    with pytest.raises(JiraAuthError):
+        mod.run_instance(CONN, FakeClient(), 1)
+    assert rec.count("request_full_resync") == 1
 
 
 def test_full_resync_flag_cleared_only_on_success(rec):
