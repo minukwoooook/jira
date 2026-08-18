@@ -72,9 +72,11 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "doctor":
         from jira_dashboard.doctor.db_checks import format_report, run_db_checks
 
+        # doctor와 capture는 spec §11.5/§11.6이 읽기 전용이라고 선언한 경로다 —
+        # 같은 가드를 쓰면 그 선언이 구조가 된다 (커밋 자체가 불가능해진다).
         failed = False
         if args.db or not args.jira:
-            with db_conn() as conn:
+            with db_conn(read_only=True) as conn:
                 results = run_db_checks(conn, skip_schema=args.skip_schema)
             print("=== DB ===")
             print(format_report(results))
@@ -82,7 +84,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.jira:
             from jira_dashboard.doctor.jira_checks import run_jira_checks
 
-            with db_conn() as conn:
+            with db_conn(read_only=True) as conn:
                 _, client = _client_for(conn, args.instance)
             results = run_jira_checks(client, args.project)
             print("=== JIRA ===")
@@ -95,7 +97,7 @@ def main(argv: list[str] | None = None) -> int:
 
         from jira_dashboard.capture import capture_fixtures
 
-        with db_conn() as conn:
+        with db_conn(read_only=True) as conn:
             _, client = _client_for(conn, args.instance)
         counts = capture_fixtures(client, args.project, Path(args.out),
                                   limit=args.limit, anonymize=args.anonymize)

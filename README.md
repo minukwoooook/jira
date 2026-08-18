@@ -32,6 +32,10 @@ not every hour.
 `sync --project KEY` limits the run to one enabled project — the staged
 rollout in `docs/design.md` §11.7 (steps 8-11) depends on it.
 
+`doctor` and `capture` also take a read-only connection, so the
+read-only guarantee the spec states for them (§11.5, §11.6) is enforced
+by the connection rather than by convention.
+
 ## Offline install (on-premise)
 
 Transfer is one-way via git, so the wheel bundle must be **tracked**:

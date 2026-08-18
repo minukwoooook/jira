@@ -1898,19 +1898,29 @@ TEST_ 접두사 누락                            제약조건이 실제로 막�
 같은 리눅스 계열**이므로 사외에서 받은 wheel이 그대로 동작할 가능성이 높다.
 
 ```bash
-pip download -r requirements.txt -d vendor/ \
+pip download -r requirements-dev.txt -d vendor/ \
     --only-binary=:all: --python-version 3.12 --platform manylinux2014_x86_64
+git add -f vendor/        # ← 이게 없으면 번들이 반입되지 않는다
 ```
 
 사내에서:
 ```bash
-pip install --no-index --find-links vendor/ -r requirements.txt
+pip install --no-index --find-links vendor/ -r requirements-dev.txt
 ```
+
+**`vendor/`는 `.gitignore`에 있지만 `git add -f`로 추적한다.** 반입 수단이 git 단방향인데
+무시된 디렉터리는 클론에 존재하지 않으므로, 그냥 두면 런북 1단계가 빈 디렉터리를 보고
+실패한다. 무시 규칙 자체는 유지한다 — 로컬에서 받은 잡다한 wheel이 실수로 커밋되는
+것을 막는 용도다. **런타임 의존성은 `requirements.txt`, 테스트 의존성(`pytest`)은
+`requirements-dev.txt`**로 나눠 둔다. 번들과 사내 설치는 후자를 쓴다 — 런북 7단계가
+`pytest`를 요구하기 때문이고, `pytest`가 빠진 번들로는 7단계를 아예 실행할 수 없다.
+이 두 가지(추적 여부, pytest 포함 여부)는 `tests/static/test_offline_bundle.py`가 검사한다.
 
 **`oracledb`를 thin 모드로 고른 것이 여기서 값을 한다** — 순수 Python이라 Instant Client
 설치나 네이티브 컴파일이 필요 없다. 반입 대상이 wheel 몇 개로 끝난다.
 
-의존성을 최소로 유지한다: `oracledb`, `httpx`, `pydantic`(설정), `pytest`+`pytest-asyncio`.
+의존성을 최소로 유지한다: 런타임은 `oracledb`, `httpx`, `pydantic-settings`뿐이고
+테스트는 `pytest` 하나다 (`pytest-asyncio`는 쓰지 않는다 — 비동기 코드가 없다).
 `--platform`을 지정하면 순수 Python 패키지도 `--only-binary`가 필요하므로, 위 명령이
 실패하는 패키지는 목록에서 빼는 것을 먼저 검토한다.
 

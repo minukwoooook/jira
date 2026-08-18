@@ -101,3 +101,24 @@ def test_failed_daily_step_makes_the_exit_code_nonzero(monkeypatch):
                                    errors={"PROFILE": "boom"}),
     )
     assert cli.main(["sync", "--instance", "SITE_A", "--daily"]) == 1
+
+
+def test_doctor_and_capture_use_read_only_connections(monkeypatch):
+    """spec §11.5/§11.6은 doctor와 capture가 읽기 전용이라고 선언한다 — 선언을
+    커넥션이 강제하게 한다."""
+    seen = []
+
+    @contextmanager
+    def fake_db_conn(*, read_only=False):
+        seen.append(read_only)
+        yield object()
+
+    monkeypatch.setattr("jira_dashboard.db.pool.db_conn", fake_db_conn)
+    monkeypatch.setattr(cli, "_client_for", lambda conn, key: (1, object()))
+    monkeypatch.setattr("jira_dashboard.doctor.db_checks.run_db_checks",
+                        lambda conn, skip_schema=False: [])
+    monkeypatch.setattr("jira_dashboard.capture.capture_fixtures",
+                        lambda *a, **k: {})
+    cli.main(["doctor", "--db", "--skip-schema"])
+    cli.main(["capture", "--instance", "SITE_A", "--project", "PROJ"])
+    assert seen == [True, True]
