@@ -41,12 +41,19 @@ class HttpJiraClient:
         client.secret_ref = secret_ref
         return client
 
-    def _request(self, method: str, path: str, **kw):
+    def _request(self, method: str, path: str, *, allow_404: bool = False, **kw):
+        """allow_404는 get_issue 전용이다.
+
+        모든 404를 None으로 바꾸면 base_url에 컨텍스트 경로가 빠진 것 같은 설정
+        오류가 "빈 카탈로그"로 위장한다: get_fields()가 []를 돌려주고, 그러면 EAV가
+        비고, JQL은 프로젝트를 못 찾아 이슈 0건이 되고, sync는 초록불로 끝난다.
+        삭제 감지만 "없음"과 "실패"를 구분할 필요가 있으므로 거기서만 켠다 (Item 13).
+        """
         for attempt in range(1, MAX_ATTEMPTS + 1):
             resp = self._c.request(method, path, **kw)
             if resp.status_code in (401, 403):
                 raise JiraAuthError(f"HTTP {resp.status_code} on {path}")
-            if resp.status_code == 404:
+            if resp.status_code == 404 and allow_404:
                 return None
             if resp.status_code in RETRY_STATUSES:
                 if attempt == MAX_ATTEMPTS:
@@ -109,5 +116,6 @@ class HttpJiraClient:
         )
 
     def get_issue(self, jira_issue_id: str, fields: list[str]) -> dict | None:
+        """404 → None. 삭제 감지가 "지워졌다"와 "호출이 실패했다"를 구분해야 한다."""
         return self._request("GET", f"/rest/api/2/issue/{jira_issue_id}",
-                             params={"fields": ",".join(fields)})
+                             allow_404=True, params={"fields": ",".join(fields)})

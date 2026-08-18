@@ -4,6 +4,7 @@ from datetime import date, datetime, timezone
 
 from jira_dashboard.jira.fieldmap import SYSTEM_FIELD_MAP
 from jira_dashboard.jira.models import (
+    MAX_NAME_BYTES, MAX_SHORT_NAME_BYTES, MAX_SUMMARY_BYTES, MAX_VAL_ID_BYTES,
     MAX_VAL_STR_BYTES, ChangelogItem, FieldDef, FieldValue, ParsedIssue,
 )
 
@@ -60,15 +61,21 @@ def _scalar(field_id: str, seq: int, fd: FieldDef, raw) -> FieldValue | None:
     if t == "datetime":
         return FieldValue(field_id, seq, None, None, to_utc(raw), None)
     if isinstance(raw, dict):
+        # val_id도 잘라야 한다 — TEST_ISSUE_FIELD_VALUE.val_id는 VARCHAR2(100 BYTE)다.
+        # R22가 TEST_ISSUE_FIELD_HISTORY의 같은 폭 컬럼을 고칠 때 이 형제를 놓쳤다.
+        # 사용자 key/name은 100바이트를 넘을 수 있고(디렉터리 통합 계정), 옵션 id는
+        # 짧지만 여기서 규칙을 예외 없이 적용하는 편이 낫다.
         if t == "user" or "displayName" in raw:
             return FieldValue(field_id, seq, truncate(raw.get("displayName")),
-                              None, None, raw.get("key") or raw.get("name"))
+                              None, None,
+                              truncate(raw.get("key") or raw.get("name"),
+                                       MAX_VAL_ID_BYTES))
         if t in _VALUE_TYPES or "value" in raw:
             return FieldValue(field_id, seq, truncate(raw.get("value")),
-                              None, None, raw.get("id"))
+                              None, None, truncate(raw.get("id"), MAX_VAL_ID_BYTES))
         if t in _NAME_TYPES or "name" in raw:
             return FieldValue(field_id, seq, truncate(raw.get("name")),
-                              None, None, raw.get("id"))
+                              None, None, truncate(raw.get("id"), MAX_VAL_ID_BYTES))
         return FieldValue(field_id, seq,
                           truncate(json.dumps(raw, ensure_ascii=False)),
                           None, None, None)
@@ -153,17 +160,25 @@ def parse_issue(
         jira_issue_id=str(raw["id"]),
         issue_key=raw["key"],
         project_jira_id=str((f.get("project") or {})["id"]),
-        issue_type_name=_named(f.get("issuetype")),
-        status_name=status_name,
+        # 고정 컬럼도 폭이 있다. 이슈 키/부모 키 같은 식별자는 일부러 자르지
+        # 않는다 — 잘린 식별자는 조용히 잘못된 데이터가 되므로 ORA-12899로
+        # 터지는 편이 옳다. 이름/표시명은 잘라도 의미가 보존된다.
+        issue_type_name=truncate(_named(f.get("issuetype")), MAX_SHORT_NAME_BYTES),
+        status_name=truncate(status_name, MAX_SHORT_NAME_BYTES),
         status_category=category,
-        priority_name=_named(f.get("priority")),
-        resolution_name=_named(f.get("resolution")),
-        assignee_user_key=assignee.get("key") or assignee.get("name"),
-        assignee_display_name=assignee.get("displayName"),
-        reporter_user_key=reporter.get("key") or reporter.get("name"),
-        reporter_display_name=reporter.get("displayName"),
+        priority_name=truncate(_named(f.get("priority")), MAX_SHORT_NAME_BYTES),
+        resolution_name=truncate(_named(f.get("resolution")), MAX_SHORT_NAME_BYTES),
+        assignee_user_key=truncate(assignee.get("key") or assignee.get("name"),
+                                   MAX_NAME_BYTES),
+        assignee_display_name=truncate(assignee.get("displayName"), MAX_NAME_BYTES),
+        reporter_user_key=truncate(reporter.get("key") or reporter.get("name"),
+                                   MAX_NAME_BYTES),
+        reporter_display_name=truncate(reporter.get("displayName"), MAX_NAME_BYTES),
         parent_key=parent.get("key"),
-        summary=(f.get("summary") or "")[:1000] or None,
+        # M17: 1000 "문자"로 자르던 것을 1024 "바이트"로 바꾼다. Jira가 summary를
+        # 255자로 제한한다는 전제 덕분에 우연히 안전했을 뿐, 다른 곳은 전부 바이트
+        # 기준인데 여기만 문자 기준이었다 (한글 1000자 = 3000바이트).
+        summary=truncate(f.get("summary"), MAX_SUMMARY_BYTES) or None,
         created_at=to_utc(f["created"]),
         updated_at=to_utc(f["updated"]),
         resolved_at=to_utc(f.get("resolutiondate")),

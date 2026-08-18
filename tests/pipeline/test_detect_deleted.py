@@ -59,3 +59,42 @@ def test_deleted_and_moved_out_are_marked(monkeypatch, fake_jira):
     assert r.count("relocate_issue") == 1
     marked = r.first("mark_deleted")["args"][0]
     assert [m["reason"] for m in marked] == ["DELETED"]
+
+
+def test_live_ids_stop_on_zero_progress(fake_jira):
+    """Item 12: 여기서 페이징을 다시 구현했더니, 100줄 옆 sync_issues에 있던 무진행
+    가드가 빠져 있었다 — max_results=0인데 issues가 비어있지 않으면 start_at이
+    전진하지 못해 영원히 돈다. 이제 같은 iter_search_pages를 쓴다."""
+    from jira_dashboard.jira.protocol import SearchPage
+
+    real = fake_jira.search_issues("project = PROJ", 0, 1000, False)
+    stuck = SearchPage(start_at=0, max_results=0, total=real.total,
+                       issues=real.issues)
+
+    class _ZeroProgressClient:
+        def __init__(self):
+            self.calls = 0
+
+        def search_issues(self, jql, start_at, max_results, expand_changelog):
+            self.calls += 1
+            assert self.calls < 10, "무진행 루프에 빠졌다"
+            return stuck
+
+    client = _ZeroProgressClient()
+    ids = mod.live_issue_ids(client, "PROJ")
+    assert client.calls == 1
+    assert len(ids) == len(real.issues)
+
+
+def test_live_ids_do_not_request_changelog(fake_jira):
+    """id만 필요하다 — expand=changelog를 켜면 응답이 수십 배가 된다."""
+    seen = []
+
+    class _Spy:
+        def search_issues(self, jql, start_at, max_results, expand_changelog):
+            seen.append(expand_changelog)
+            return fake_jira.search_issues(jql, start_at, max_results,
+                                           expand_changelog)
+
+    mod.live_issue_ids(_Spy(), "PROJ")
+    assert seen and not any(seen)

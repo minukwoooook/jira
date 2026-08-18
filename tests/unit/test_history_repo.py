@@ -256,3 +256,20 @@ def test_replace_history_still_deletes_when_rows_are_empty():
 
     assert len(captured["execute_calls"]) == 1
     assert "called" not in captured  # executemany was never reached
+
+
+# --- 형제 함수들과 같은 빈 리스트 가드 (IN ()는 ORA-00936) ---------------------
+
+class _ExplodingConn:
+    """커서를 만들려고 하면 터진다 — SQL을 아예 실행하지 않아야 통과한다."""
+
+    def cursor(self):
+        raise AssertionError("빈 issue_ids로 SQL을 실행하려 했다 (IN () → ORA-00936)")
+
+
+def test_load_changes_with_no_issue_ids_runs_no_sql():
+    assert history_repo.load_changes(_ExplodingConn(), []) == {}
+
+
+def test_update_first_done_at_with_no_issue_ids_runs_no_sql():
+    assert history_repo.update_first_done_at(_ExplodingConn(), []) == 0

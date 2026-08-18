@@ -3,6 +3,7 @@ from dataclasses import dataclass
 
 from jira_dashboard.db.repository.catalog import enabled_projects, project_id_by_jira_id
 from jira_dashboard.jira.protocol import JiraClient
+from jira_dashboard.pipeline.sync_issues import build_jql, iter_search_pages
 
 log = logging.getLogger(__name__)
 
@@ -33,18 +34,16 @@ class DeleteVerdict:
 
 
 def live_issue_ids(client: JiraClient, project_key: str) -> set[str]:
-    """fields=id 로 전체 id만 가볍게 훑는다. maxResults는 응답값을 믿는다 (A7)."""
-    seen, start_at = set(), 0
-    while True:
-        page = client.search_issues(
-            f"project = {project_key} ORDER BY updated ASC", start_at, 1000, False
-        )
-        if not page.issues:
-            break
+    """fields=id 로 전체 id만 가볍게 훑는다. maxResults는 응답값을 믿는다 (A7).
+
+    페이징은 sync_issues.iter_search_pages를 그대로 쓴다. 여기서 따로 구현했던
+    루프에는 100줄 옆에 있던 무진행 가드가 빠져 있었다 — max_results=0인데 issues가
+    비어있지 않은 응답이 오면 start_at이 전진하지 못해 영원히 돈다 (Item 12).
+    """
+    seen: set[str] = set()
+    for page in iter_search_pages(client, build_jql(project_key, None), 1000,
+                                  expand_changelog=False):
         seen.update(str(i["id"]) for i in page.issues)
-        start_at += page.max_results
-        if start_at >= page.total:
-            break
     return seen
 
 

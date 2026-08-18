@@ -111,7 +111,11 @@ def profile_fields(conn, instance_id: int) -> int:
         field_pk = field_pks.get(field_id)
         if field_pk is None:
             continue
-        if all(p["issue_count"] == 0 for p in payload if p["field_pk"] == field_pk):
+        # all()은 빈 generator에서 True다 — 프로젝트가 없거나 이 필드가 payload에
+        # 없으면 "Time Tracking이 꺼졌다"는 로그가 근거 없이 나왔다. 관측한 행이
+        # 있을 때만 판단한다 (R34의 "관측하지 못한 것에 판정을 주지 않는다"의 로그판).
+        counts = [p["issue_count"] for p in payload if p["field_pk"] == field_pk]
+        if counts and all(c == 0 for c in counts):
             log.info("field %s has no values — Time Tracking may be disabled", field_id)
 
     conn.commit()

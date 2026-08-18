@@ -1,7 +1,10 @@
 from dataclasses import dataclass, field
 
 from jira_dashboard.jira.fieldmap import SYSTEM_FIELD_MAP, value_kind_of
-from jira_dashboard.jira.models import FieldDef
+from jira_dashboard.jira.models import (
+    MAX_CUSTOM_TYPE_BYTES, MAX_NAME_BYTES, MAX_SCHEMA_TYPE_BYTES, FieldDef,
+)
+from jira_dashboard.jira.parser import truncate
 
 _MERGE_INSTANCE = """
 MERGE INTO test_jira_instance t
@@ -135,8 +138,11 @@ def upsert_projects(conn, instance_id: int, projects: list[dict]) -> list[int]:
         jid = str(p["id"])
         if jid in existing and existing[jid][1] != p["key"]:
             key_changed.append(existing[jid][0])
+        # 프로젝트 이름은 VARCHAR2(255 BYTE)다. 키/원본 id는 식별자이므로 자르지
+        # 않는다 — 잘린 식별자는 조용히 잘못된 데이터가 된다.
         rows.append({"instance_id": instance_id, "jira_project_id": jid,
-                     "project_key": p["key"], "name": p.get("name")})
+                     "project_key": p["key"],
+                     "name": truncate(p.get("name"), MAX_NAME_BYTES)})
     if rows:
         cur.executemany(_MERGE_PROJECT, rows, batcherrors=False)
     return key_changed
@@ -165,12 +171,16 @@ def upsert_fields(conn, instance_id: int, defs: list[FieldDef]) -> list[str]:
         storage, column, label, kind, dim, msr = storage_for(fd)
         if fd.field_id in previous and previous[fd.field_id] != kind:
             changed.append(fd.field_id)
+        # field_name(255) / schema_type·schema_items(50) / custom_type(200) 모두
+        # Jira가 주는 문자열이고 상한이 없었다.
         rows.append({
             "instance_id": instance_id, "field_id": fd.field_id,
-            "field_name": fd.field_name,
+            "field_name": truncate(fd.field_name, MAX_NAME_BYTES),
             "is_custom": "Y" if fd.is_custom else "N",
-            "schema_type": fd.schema_type, "schema_items": fd.schema_items,
-            "custom_type": fd.custom_type, "value_kind": kind,
+            "schema_type": truncate(fd.schema_type, MAX_SCHEMA_TYPE_BYTES),
+            "schema_items": truncate(fd.schema_items, MAX_SCHEMA_TYPE_BYTES),
+            "custom_type": truncate(fd.custom_type, MAX_CUSTOM_TYPE_BYTES),
+            "value_kind": kind,
             "storage_kind": storage, "column_name": column,
             "label_column_name": label, "is_dimension": dim, "is_measure": msr,
         })

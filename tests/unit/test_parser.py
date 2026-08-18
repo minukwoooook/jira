@@ -209,3 +209,47 @@ def test_parse_changelog_keeps_field_id_none_when_absent():
         "items": [{"field": "Link", "toString": "blocks ABC-1"}],
     }]
     assert parser.parse_changelog(raw)[0].field_id is None
+
+
+# --- Important 5: EAV val_id도 100바이트에서 잘려야 한다 -------------------------
+# R22가 TEST_ISSUE_FIELD_HISTORY.val_id(100 BYTE)를 고칠 때 같은 폭인 형제 컬럼
+# TEST_ISSUE_FIELD_VALUE.val_id를 놓쳤다. 아래 세 테스트는
+# tests/unit/test_derive_history.py::test_val_id_truncates_to_100_bytes의 EAV 쪽
+# 쌍둥이다.
+
+def test_option_id_truncates_to_100_bytes():
+    raw = {"value": "Regression", "id": "1" * 200}
+    vals = parser.extract_values("customfield_4", _fd("customfield_4", "option"), raw)
+    assert len(vals[0].val_id.encode("utf-8")) <= 100
+
+
+def test_user_key_truncates_to_100_bytes():
+    """디렉터리 통합 계정의 key는 100바이트를 넘을 수 있다."""
+    raw = {"key": "가" * 60, "name": "n", "displayName": "Jane Doe"}
+    vals = parser.extract_values("customfield_5", _fd("customfield_5", "user"), raw)
+    assert len(vals[0].val_id.encode("utf-8")) <= 100
+
+
+def test_named_entity_id_truncates_to_100_bytes():
+    raw = {"name": "Blocker", "id": "9" * 300}
+    vals = parser.extract_values("priority", _fd("priority", "priority"), raw)
+    assert len(vals[0].val_id.encode("utf-8")) <= 100
+
+
+def test_multibyte_val_id_is_not_cut_mid_character():
+    """바이트로 자르면서 UTF-8 시퀀스를 반토막 내면 안 된다."""
+    raw = {"value": "v", "id": "한" * 100}
+    vals = parser.extract_values("customfield_4", _fd("customfield_4", "option"), raw)
+    assert vals[0].val_id == "한" * 33          # 33 * 3바이트 = 99바이트
+
+
+# --- M17: summary는 문자가 아니라 바이트로 자른다 -------------------------------
+
+def test_summary_truncates_by_bytes_not_characters(field_index, category_of,
+                                                   sample_issue):
+    """TEST_JIRA_ISSUE.summary는 VARCHAR2(1024 BYTE)다. 1000 "문자"로 자르면
+    한글 요약이 최대 3000바이트가 되어 ORA-12899다 — 다른 모든 자리는 바이트
+    기준인데 여기만 문자 기준이었다."""
+    sample_issue["fields"]["summary"] = "요" * 1000
+    parsed = parser.parse_issue(sample_issue, field_index, category_of)
+    assert len(parsed.summary.encode("utf-8")) <= 1024

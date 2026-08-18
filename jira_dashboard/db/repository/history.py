@@ -1,13 +1,15 @@
 import logging
 from datetime import datetime, timezone
 
-from jira_dashboard.jira.models import MAX_CHANGELOG_STR_BYTES, ChangelogItem
+from jira_dashboard.jira.models import (
+    MAX_CHANGELOG_ID_BYTES, MAX_CHANGELOG_STR_BYTES, MAX_NAME_BYTES, ChangelogItem,
+)
 from jira_dashboard.jira.parser import truncate
 
 log = logging.getLogger(__name__)
 
 
-def _as_utc(dt: datetime | None) -> datetime | None:
+def as_utc(dt: datetime | None) -> datetime | None:
     """Oracle 19c의 plain TIMESTAMP 컬럼은 오프셋 없는(naive) datetime으로 돌아온다.
 
     이 파이프라인의 모든 타임스탬프는 UTC로 저장된다는 규약이므로(spec §2.1),
@@ -86,17 +88,23 @@ def upsert_changelog(conn, issue_id: int, items,
         field_pk = _resolve_field_pk(item, field_pks, field_names)
         if field_pk is None:
             unresolved.add(item.field_name)
+        # from_id/to_id는 VARCHAR2(255 BYTE)다. Jira는 Sprint 변경이나 다중선택
+        # 필드 변경에서 콤마로 결합한 id 목록을 여기 넣으므로, 오래 살아남은 이슈에서
+        # 255바이트를 넘는다 — from_str/to_str만 자르고 있었다. field_name과
+        # author_display_name(둘 다 255)도 상한이 없었다. field_pk 해석은 자르기
+        # *전에* 끝났으므로(위 _resolve_field_pk) 잘린 이름으로 조회하는 일은 없다.
         rows.append({
             "issue_id": issue_id, "jira_history_id": item.history_id,
             "item_seq": item.item_seq,
-            "author_user_key": item.author_user_key,
-            "author_display_name": item.author_display_name,
+            "author_user_key": truncate(item.author_user_key, MAX_NAME_BYTES),
+            "author_display_name": truncate(item.author_display_name,
+                                            MAX_NAME_BYTES),
             "changed_at": item.changed_at,
             "field_pk": field_pk,
-            "field_name": item.field_name,
-            "from_id": item.from_id,
+            "field_name": truncate(item.field_name, MAX_NAME_BYTES),
+            "from_id": truncate(item.from_id, MAX_CHANGELOG_ID_BYTES),
             "from_str": truncate(item.from_str, MAX_CHANGELOG_STR_BYTES) or None,
-            "to_id": item.to_id,
+            "to_id": truncate(item.to_id, MAX_CHANGELOG_ID_BYTES),
             "to_str": truncate(item.to_str, MAX_CHANGELOG_STR_BYTES) or None,
         })
     if rows:
@@ -203,7 +211,7 @@ def load_issue_states(conn, issue_ids: list[int]) -> dict[int, dict]:
          assignee_key, assignee_name, reporter_key, reporter_name,
          parent) in cur.fetchall():
         states[iid] = {
-            "created_at": _as_utc(created),
+            "created_at": as_utc(created),
             "current_values": {
                 "issuetype": (issue_type, None),
                 "status": (status, None),
@@ -236,6 +244,8 @@ def load_current_eav_values(conn, issue_ids: list[int]
 
 
 def load_changes(conn, issue_ids: list[int]) -> dict[int, list[ChangelogItem]]:
+    if not issue_ids:      # IN ()는 ORA-00936이다 — 형제 함수들과 같은 가드
+        return {}
     placeholders, binds = _binds(issue_ids)
     cur = conn.cursor()
     cur.execute(_SELECT_CHANGES.format(placeholders=placeholders), **binds)
@@ -244,7 +254,7 @@ def load_changes(conn, issue_ids: list[int]) -> dict[int, list[ChangelogItem]]:
          from_id, from_str, to_id, to_str) in cur.fetchall():
         out.setdefault(iid, []).append(ChangelogItem(
             history_id=hid, item_seq=seq, author_user_key=None,
-            author_display_name=None, changed_at=_as_utc(at), field_name=field_name,
+            author_display_name=None, changed_at=as_utc(at), field_name=field_name,
             field_id=field_id, from_id=from_id, from_str=from_str,
             to_id=to_id, to_str=to_str,
         ))
@@ -260,6 +270,8 @@ def replace_history(conn, issue_id: int, rows: list[dict]) -> None:
 
 
 def update_first_done_at(conn, issue_ids: list[int]) -> int:
+    if not issue_ids:
+        return 0
     placeholders, binds = _binds(issue_ids)
     cur = conn.cursor()
     cur.execute(_MERGE_FIRST_DONE.format(placeholders=placeholders), **binds)

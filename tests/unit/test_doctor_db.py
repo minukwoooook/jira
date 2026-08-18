@@ -92,26 +92,103 @@ def test_skip_schema_omits_the_schema_check():
     assert "DB7" not in ids
 
 
-def test_schema_check_reports_missing_tables(monkeypatch):
-    """DDL을 아직 안 돌렸으면 FAIL이어야 한다 — 런북 4단계의 게이트."""
-    from jira_dashboard.doctor import db_checks
+# --- DB7: 이름만이 아니라 폭·인덱스·제약·뷰·시퀀스까지 (R33) -------------------
+# DB7은 손으로 적용한 DDL이 실제로 들어갔는지 확인하는 유일한 자동 검사이고, 런북
+# 4단계는 그걸 근거로 "스키마 일치"를 주장한다. 컬럼 이름만 보면 인덱스 하나가
+# 빠지거나 폭이 다른 것을 통과시킨다.
 
-    monkeypatch.setattr(db_checks, "_actual_schema", lambda conn: {})
-    r = _by_id(db_checks.run_db_checks(_conn()))
+def _schema_answers(ddl_dir, **overrides):
+    """실제 DDL에서 만든 "완벽히 일치하는 데이터 딕셔너리" 응답."""
+    from jira_dashboard.db import schema_map
+
+    rows = []
+    for table, columns in schema_map.parse_columns(ddl_dir).items():
+        for column in columns.values():
+            # NUMBER/TIMESTAMP의 data_length는 내부 표현 크기다 — DB7은 무시해야 한다.
+            length = column.byte_length if column.byte_length is not None else 22
+            rows.append((table, column.name, column.data_type, length))
+    answers = {
+        "user_tab_columns": rows,
+        "user_indexes": [(n,) for n in sorted(schema_map.parse_indexes(ddl_dir))],
+        "user_constraints": [(n,) for n in
+                             sorted(schema_map.parse_constraints(ddl_dir))],
+        "user_views": [(n,) for n in sorted(schema_map.parse_views(ddl_dir))],
+        "user_sequences": [(n,) for n in sorted(schema_map.parse_sequences(ddl_dir))],
+    }
+    answers.update(overrides)
+    return answers
+
+
+def test_schema_check_reports_missing_tables(ddl_dir):
+    """DDL을 아직 안 돌렸으면 FAIL이어야 한다 — 런북 4단계의 게이트."""
+    r = _by_id(run_db_checks(_conn(**_schema_answers(ddl_dir, user_tab_columns=[]))))
     assert r["DB7"].verdict == "FAIL"
 
 
-def test_schema_check_passes_when_actual_matches_real_ddl(ddl_dir, monkeypatch):
-    """DB7이 비교하는 두 쪽(파싱된 DDL, 실제 스키마)이 정확히 일치하면 PASS여야
-    한다 — Task 9가 했던 것처럼, 런타임 비교 로직을 schema_map.parse_ddl의 실제
-    출력과 맞대본다 (정적 게이트는 doctor를 스캔하지 않으므로 이 테스트가
-    유일한 검증이다)."""
-    from jira_dashboard.db import schema_map
-    from jira_dashboard.doctor import db_checks
+def test_schema_check_passes_when_actual_matches_real_ddl(ddl_dir):
+    """DB7이 비교하는 두 쪽(파싱된 DDL, 실제 데이터 딕셔너리)이 정확히 일치하면
+    PASS여야 한다. 정적 게이트는 doctor를 스캔하지 않으므로 이 테스트가 유일한
+    검증이다."""
+    r = _by_id(run_db_checks(_conn(**_schema_answers(ddl_dir))))
+    assert r["DB7"].verdict == "PASS", r["DB7"].observed
+    for label in ("tables", "indexes", "constraints", "views", "sequences"):
+        assert label in r["DB7"].observed
 
-    expected = schema_map.parse_ddl(ddl_dir)
-    monkeypatch.setattr(db_checks, "_actual_schema", lambda conn: expected)
-    r = _by_id(db_checks.run_db_checks(_conn()))
+
+def test_schema_check_reports_a_missing_index(ddl_dir):
+    """인덱스 하나가 빠져도 컬럼 이름 대조는 통과한다 — 그게 R33의 요지다."""
+    answers = _schema_answers(ddl_dir)
+    dropped = answers["user_indexes"][0][0]
+    answers["user_indexes"] = answers["user_indexes"][1:]
+    r = _by_id(run_db_checks(_conn(**answers)))
+    assert r["DB7"].verdict == "FAIL"
+    assert dropped in r["DB7"].observed
+
+
+def test_schema_check_reports_a_missing_view(ddl_dir):
+    answers = _schema_answers(ddl_dir, user_views=[])
+    r = _by_id(run_db_checks(_conn(**answers)))
+    assert r["DB7"].verdict == "FAIL"
+    assert "TEST_V_UNIFY_CANDIDATE" in r["DB7"].observed
+
+
+def test_schema_check_reports_a_missing_sequence(ddl_dir):
+    """시퀀스가 없으면 next_issue_ids가 9단계에서 즉시 죽는다."""
+    answers = _schema_answers(ddl_dir, user_sequences=[])
+    r = _by_id(run_db_checks(_conn(**answers)))
+    assert r["DB7"].verdict == "FAIL"
+    assert "TEST_SEQ_ISSUE_ID" in r["DB7"].observed
+
+
+def test_schema_check_reports_a_missing_constraint(ddl_dir):
+    answers = _schema_answers(ddl_dir)
+    dropped = answers["user_constraints"][0][0]
+    answers["user_constraints"] = answers["user_constraints"][1:]
+    r = _by_id(run_db_checks(_conn(**answers)))
+    assert r["DB7"].verdict == "FAIL"
+    assert dropped in r["DB7"].observed
+
+
+def test_schema_check_reports_a_wrong_column_width(ddl_dir):
+    """폭이 다르면 코드의 truncate 상한과 어긋난 것이므로 ORA-12899가 예정돼 있다."""
+    answers = _schema_answers(ddl_dir)
+    answers["user_tab_columns"] = [
+        (t, c, dt, 40 if (t, c) == ("TEST_ISSUE_CHANGELOG", "FROM_ID") else n)
+        for t, c, dt, n in answers["user_tab_columns"]
+    ]
+    r = _by_id(run_db_checks(_conn(**answers)))
+    assert r["DB7"].verdict == "FAIL"
+    assert "FROM_ID width 40" in r["DB7"].observed
+
+
+def test_schema_check_ignores_number_and_timestamp_lengths(ddl_dir):
+    """NUMBER(12)의 data_length는 22다 — 폭 대조에 쓰면 전부 FAIL이 된다."""
+    answers = _schema_answers(ddl_dir)
+    answers["user_tab_columns"] = [
+        (t, c, dt, 11 if dt in ("NUMBER", "TIMESTAMP", "BLOB", "DATE") else n)
+        for t, c, dt, n in answers["user_tab_columns"]
+    ]
+    r = _by_id(run_db_checks(_conn(**answers)))
     assert r["DB7"].verdict == "PASS", r["DB7"].observed
 
 
@@ -158,3 +235,38 @@ def test_db8_fails_when_bound_sentinel_disagrees_with_ddl_literal():
 def test_db8_impact_is_meaningful():
     r = _by_id(run_db_checks(_conn(), skip_schema=True))
     assert r["DB8"].impact
+
+
+# --- R34: db_checks도 같은 규칙을 따른다 ----------------------------------------
+# DB4/DB6은 관측 결과와 무관하게 PASS를 찍고 있었다. DB4는 특히 모든 truncate()가
+# 깔고 있는 "VARCHAR2 폭은 바이트다"라는 전제의 유일한 근거인데, 두 조회가 아무것도
+# 돌려주지 않아도 PASS였다.
+
+def test_db4_warns_when_it_observed_nothing():
+    conn = _conn(**{"NLS_CHARACTERSET": [], "db_block_size": []})
+    r = _by_id(run_db_checks(conn, skip_schema=True))
+    assert r["DB4"].verdict == "WARN"
+    assert "NLS_CHARACTERSET" in r["DB4"].impact
+
+
+def test_db4_passes_when_both_facts_are_observed():
+    r = _by_id(run_db_checks(_conn(), skip_schema=True))
+    assert r["DB4"].verdict == "PASS"
+    assert "AL32UTF8" in r["DB4"].observed
+
+
+def test_db6_warns_when_no_test_tables_exist():
+    """런북 4단계에서 0개가 보이면 DDL이 적용되지 않은 것이다 — PASS일 수 없다."""
+    r = _by_id(run_db_checks(_conn(user_tables=[(0,)]), skip_schema=True))
+    assert r["DB6"].verdict == "WARN"
+
+
+def test_db6_warns_when_the_count_query_returned_nothing():
+    r = _by_id(run_db_checks(_conn(user_tables=[]), skip_schema=True))
+    assert r["DB6"].verdict == "WARN"
+    assert "행을 돌려주지 않았다" in r["DB6"].observed
+
+
+def test_db6_passes_when_tables_are_present():
+    r = _by_id(run_db_checks(_conn(), skip_schema=True))
+    assert r["DB6"].verdict == "PASS"

@@ -1,4 +1,5 @@
 from jira_dashboard.doctor.jira_checks import run_jira_checks
+from jira_dashboard.jira.protocol import SearchPage
 
 
 def _by_id(results): return {r.id: r for r in results}
@@ -185,3 +186,60 @@ def test_a12_fails_and_short_circuits_when_credentials_are_rejected():
 def test_every_result_carries_impact_text(fake_jira):
     for result in run_jira_checks(fake_jira, "PROJ"):
         assert result.impact, result.id
+
+
+# --- R34: 관측하지 못한 것에는 PASS도 FAIL도 주지 않는다 -----------------------
+
+class _NoIssuesClient:
+    """카탈로그는 정상이지만 프로브 프로젝트에 이슈가 하나도 없는 인스턴스."""
+
+    def get_fields(self):
+        return [{"id": "summary", "name": "Summary", "schema": {"type": "string"}}]
+
+    def get_projects(self):
+        return [{"id": "10000", "key": "PROJ"}]
+
+    def get_statuses(self):
+        return [{"name": "Done", "statusCategory": {"key": "done"}}]
+
+    def search_issues(self, jql, start_at, max_results, expand_changelog):
+        return SearchPage(start_at=0, max_results=100, total=0, issues=[])
+
+    def get_issue_changelog(self, key, start_at):
+        raise AssertionError("불려서는 안 된다")
+
+    def get_issue(self, jira_issue_id, fields):
+        return None
+
+
+def test_a4_warns_when_ordering_cannot_be_measured(fake_jira):
+    """changelog 타임스탬프가 하나뿐이면 정렬은 판정할 수 없다 — FAIL이 아니라 WARN.
+    FAIL로 매핑하면 "고칠 것이 없는데 고치라고" 말하는 셈이고, 런북 5단계에서
+    사외로 돌려보낸다."""
+    for issue in fake_jira._issues.values():
+        histories = (issue.get("changelog") or {}).get("histories") or []
+        for h in histories:
+            h["created"] = "2026-01-05T09:00:00.000+0900"     # 전부 같은 시각
+    r = _by_id(run_jira_checks(fake_jira, "PROJ"))
+    assert r["A4"].verdict == "WARN"
+    assert "측정" in r["A4"].observed
+
+
+def test_a4_still_fails_when_descending_order_is_observed(fake_jira):
+    """관측한 FAIL은 그대로 FAIL이어야 한다 — WARN 규칙이 진짜 결함을 덮으면 안 된다."""
+    for issue in fake_jira._issues.values():
+        histories = (issue.get("changelog") or {}).get("histories") or []
+        if len(histories) >= 2:
+            histories.sort(key=lambda h: h["created"], reverse=True)
+    r = _by_id(run_jira_checks(fake_jira, "PROJ"))
+    assert r["A4"].verdict == "FAIL"
+
+
+def test_a2_and_a6_warn_instead_of_failing_when_no_issues_were_returned():
+    """이슈가 0건이면 A1이 이미 그 사실을 FAIL로 보고한다. A2/A6까지 FAIL을 찍으면
+    관측하지 않은 것에 판정을 준 것이고, 실패 3개가 원인 1개를 가린다."""
+    r = _by_id(run_jira_checks(_NoIssuesClient(), "PROJ"))
+    assert r["A1"].verdict == "FAIL"
+    assert r["A2"].verdict == "WARN"
+    assert r["A6"].verdict == "WARN"
+    assert r["A4"].verdict == "WARN"

@@ -28,8 +28,11 @@ class SyncResult:
 
 
 def build_jql(project_key: str, since: datetime | None) -> str:
+    """프로젝트 키를 따옴표로 감싼다. Jira의 키 문자집합(대문자+숫자)에서는 없어도
+    되지만, 식별자를 인용 없이 문장에 끼워 넣는 습관 자체를 남기지 않는다."""
     start = (since or EPOCH).strftime("%Y-%m-%d %H:%M")
-    return f'project = {project_key} AND updated >= "{start}" ORDER BY updated ASC'
+    return (f'project = "{project_key}" AND updated >= "{start}" '
+            "ORDER BY updated ASC")
 
 
 def next_watermark(max_updated: datetime | None,

@@ -1,3 +1,4 @@
+import logging
 import re
 from pathlib import Path
 
@@ -120,3 +121,26 @@ def test_column_scan_hits_test_jira_issue_exactly_once():
     mod.profile_fields(conn, instance_id=1)
     scans = [s for s in conn._cur.executed if "FROM   test_jira_issue" in s]
     assert len(scans) == 1
+
+
+def test_no_time_tracking_log_when_nothing_was_observed(caplog):
+    """all()은 빈 generator에서 True다 — 프로젝트가 하나도 없거나 시간 필드가
+    payload에 없으면 "Time Tracking이 꺼졌을 수 있다"는 로그가 근거 없이 나왔다."""
+    conn = _FakeConn([], [])          # 프로젝트도, field_pk도 없다
+    with caplog.at_level(logging.INFO, logger=mod.log.name):
+        mod.profile_fields(conn, instance_id=1)
+    assert not [r for r in caplog.records if "Time Tracking" in r.getMessage()]
+
+
+def test_time_tracking_log_still_fires_when_counts_are_all_zero(caplog):
+    """관측한 행이 있고 그게 전부 0일 때는 로그가 나와야 한다 — 위 가드가 진짜
+    신호까지 죽이면 안 된다."""
+    field_pk_rows = [(field_id, i + 1)
+                     for i, (field_id, _) in enumerate(mod.COLUMN_FIELDS)]
+    n = len(mod.COLUMN_FIELDS)
+    scan_rows = [(100,) + (0,) * n + (0,) * n]
+    conn = _FakeConn(field_pk_rows, scan_rows)
+    with caplog.at_level(logging.INFO, logger=mod.log.name):
+        mod.profile_fields(conn, instance_id=1)
+    messages = [r.getMessage() for r in caplog.records if "Time Tracking" in r.getMessage()]
+    assert len(messages) == 3, messages

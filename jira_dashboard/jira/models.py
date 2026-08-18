@@ -2,9 +2,24 @@ from dataclasses import dataclass
 from datetime import date, datetime, timezone
 
 SENTINEL = datetime(9999, 12, 31, tzinfo=timezone.utc)
-MAX_VAL_STR_BYTES = 1000
-MAX_VAL_ID_BYTES = 100  # TEST_ISSUE_FIELD_HISTORY.val_id VARCHAR2(100 BYTE)
-MAX_CHANGELOG_STR_BYTES = 4000  # TEST_ISSUE_CHANGELOG.from_str/to_str VARCHAR2(4000 BYTE)
+
+# 컬럼 폭 상한. 값은 DDL에서 선언한 BYTE 폭과 같아야 하며, 그 일치는
+# tests/static/test_column_widths.py가 schema_map.column_byte_limits로 대조한다 —
+# 손으로 적은 숫자와 DDL이 어긋나는 것이 ORA-12899의 실제 원인이었다.
+MAX_VAL_STR_BYTES = 1000        # TEST_ISSUE_FIELD_VALUE/HISTORY.val_str
+MAX_VAL_ID_BYTES = 100          # 같은 두 테이블의 val_id
+MAX_CHANGELOG_STR_BYTES = 4000  # TEST_ISSUE_CHANGELOG.from_str/to_str
+MAX_CHANGELOG_ID_BYTES = 255    # 같은 테이블의 from_id/to_id — Jira는 여기에
+                                # Sprint/다중선택 변경의 콤마 결합 id 목록을 넣는다
+MAX_NAME_BYTES = 255            # field_name, author_display_name, *_user_key,
+                                # *_display_name
+MAX_SHORT_NAME_BYTES = 100      # issue_type_name/status_name/priority_name/
+                                # resolution_name
+MAX_KEY_BYTES = 50              # issue_key, jira_issue_id, parent_key
+MAX_SUMMARY_BYTES = 1024        # TEST_JIRA_ISSUE.summary
+MAX_ERROR_MSG_BYTES = 4000      # TEST_SYNC_RUN.error_msg
+MAX_SCHEMA_TYPE_BYTES = 50      # TEST_JIRA_FIELD.schema_type/schema_items
+MAX_CUSTOM_TYPE_BYTES = 200     # TEST_JIRA_FIELD.custom_type
 
 
 @dataclass(frozen=True)

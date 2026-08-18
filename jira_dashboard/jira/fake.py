@@ -6,14 +6,14 @@ from pathlib import Path
 
 from jira_dashboard.jira.protocol import ChangelogPage, JiraTransientError, SearchPage
 
-_PROJECT_RE = re.compile(r"project\s*=\s*(\w+)", re.IGNORECASE)
+_PROJECT_RE = re.compile(r'project\s*=\s*"?(\w+)"?', re.IGNORECASE)
 _UPDATED_RE = re.compile(r'updated\s*>=\s*"([^"]+)"', re.IGNORECASE)
 
 
 class FakeJiraClient:
     """픽스처 기반 JiraClient. JQL의 최소 부분집합만 해석한다.
 
-    지원: `project = X`, `updated >= "..."`, `ORDER BY updated ASC`
+    지원: `project = X` / `project = "X"`, `updated >= "..."`, `ORDER BY updated ASC`
     그 외 절은 무시한다. 실제 JQL 파서 동작은 사내에서만 검증된다 (spec §11.8).
     """
 

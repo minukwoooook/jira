@@ -4,17 +4,19 @@
 확인하고 테이블을 만들거나 쓰지 않는다.
 
 이 모듈은 정적 SQL 게이트(SCANNED_PACKAGES)의 스캔 대상이지만, 지금 이 파일의
-SQL 문자열 중 그 게이트가 실제로 검증하는 것은 하나도 없다. DB1~DB6, DB8은 전부
+SQL 문자열 중 그 게이트가 실제로 검증하는 것은 하나도 없다. DB1~DB8은 전부
 Oracle 딕셔너리 뷰/의사테이블(v$version, v$parameter, v$timezone_names,
-user_sys_privs, user_tables, user_tab_columns, dual)만 참조하고 애플리케이션의
-TEST_ 테이블을 전혀 언급하지 않는다. TEST_ 라는 글자가 나오는 유일한 자리는
-DB6/DB7의 LIKE 이스케이프 패턴(밑줄 앞에 이스케이프 문자를 붙여 Oracle LIKE의
-와일드카드 의미를 지운 것)인데, 게이트의 테이블 토큰 정규식은 TEST_ 바로 뒤에
-그 이스케이프 문자가 끼어 있으면 매치하지 못한다 — 그래서 실제 테이블명이 아닌
-이 패턴은 게이트에 걸리지 않는다. DB7의 스키마 대조 자체도 SQL 문자열이 아니라
-Python 딕셔너리 비교(schema_map.parse_ddl vs _actual_schema)로 이뤄지므로
-애초에 이 게이트가 볼 자리가 없다. DB7은 오직 Python 레벨 테스트
-(test_schema_check_passes_when_actual_matches_real_ddl)로만 검증된다.
+user_sys_privs, user_tables, user_tab_columns, user_indexes, user_constraints,
+user_views, user_sequences, dual)만 참조하고 애플리케이션의 TEST_ 테이블을 전혀
+언급하지 않는다. TEST_ 라는 글자가 나오는 유일한 자리는 LIKE 이스케이프
+패턴(밑줄 앞에 이스케이프 문자를 붙여 Oracle LIKE의 와일드카드 의미를 지운 것)인데,
+게이트의 테이블 토큰 정규식은 TEST_ 바로 뒤에 그 이스케이프 문자가 끼어 있으면
+매치하지 못한다 — 그래서 실제 테이블명이 아닌 이 패턴은 게이트에 걸리지 않는다.
+DB7의 대조 자체도 SQL 문자열이 아니라 Python 비교(schema_map의 파싱 결과 vs
+데이터 딕셔너리)로 이뤄지므로 애초에 이 게이트가 볼 자리가 없다. DB7은 오직
+Python 레벨 테스트(tests/unit/test_doctor_db.py)로만 검증되며, 그 테스트는 실제
+DDL에서 만든 딕셔너리 응답을 먹여 이름·폭·인덱스·제약·뷰·시퀀스 대조를 모두
+확인한다 (R33).
 """
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -24,10 +26,34 @@ from jira_dashboard.db import schema_map
 from jira_dashboard.jira.models import SENTINEL
 
 DDL_DIR = Path(__file__).parents[1] / "db" / "ddl"
+# data_length를 바이트 폭으로 읽어도 되는 타입 (spec §2.2는 전부 BYTE 선언이다)
+_TEXT_TYPES = {"VARCHAR2", "CHAR", "NVARCHAR2", "NCHAR", "RAW"}
 
 _SCHEMA_COLUMNS = """
-SELECT table_name, column_name FROM user_tab_columns
+SELECT table_name, column_name, data_type, data_length FROM user_tab_columns
 WHERE  table_name LIKE 'TEST\\_%' ESCAPE '\\'
+"""
+
+# DB7이 이름만 보던 나머지 객체들. 인덱스/제약/뷰/시퀀스가 빠지면, 손으로 적용한
+# DDL에서 파일 하나를 건너뛰어도 "스키마 일치"라고 보고한다 (R33).
+_SCHEMA_INDEXES = """
+SELECT index_name FROM user_indexes
+WHERE  index_name LIKE 'TEST\\_%' ESCAPE '\\'
+"""
+
+_SCHEMA_CONSTRAINTS = """
+SELECT constraint_name FROM user_constraints
+WHERE  constraint_name LIKE 'TEST\\_%' ESCAPE '\\'
+"""
+
+_SCHEMA_VIEWS = """
+SELECT view_name FROM user_views
+WHERE  view_name LIKE 'TEST\\_%' ESCAPE '\\'
+"""
+
+_SCHEMA_SEQUENCES = """
+SELECT sequence_name FROM user_sequences
+WHERE  sequence_name LIKE 'TEST\\_%' ESCAPE '\\'
 """
 
 # DB8: 알려진 UTC 시각. 자정/자정 언저리가 아닌 시각을 골라 오프셋 변환 버그가
@@ -57,13 +83,60 @@ def _one(conn, sql, **binds):
     return row[0] if row else None
 
 
-def _actual_schema(conn) -> dict[str, set[str]]:
+def _actual_columns(conn) -> dict[str, dict[str, int | None]]:
+    """테이블 → {컬럼명: 선언 바이트 폭 또는 None}.
+
+    data_length는 VARCHAR2/CHAR에서 바이트 수다 (BYTE 세만틱 전제 — DB2/DB4가 그
+    전제를 실측한다). NUMBER/TIMESTAMP/BLOB의 data_length는 내부 표현 크기라 폭
+    대조에 쓸 수 없으므로 None으로 버린다.
+    """
     cur = conn.cursor()
     cur.execute(_SCHEMA_COLUMNS)
-    out: dict[str, set[str]] = {}
-    for table, column in cur.fetchall():
-        out.setdefault(table.upper(), set()).add(column.upper())
+    out: dict[str, dict[str, int | None]] = {}
+    for table, column, data_type, data_length in cur.fetchall():
+        width = data_length if (data_type or "").upper() in _TEXT_TYPES else None
+        out.setdefault(table.upper(), {})[column.upper()] = width
     return out
+
+
+def _names(conn, sql: str) -> set[str]:
+    cur = conn.cursor()
+    cur.execute(sql)
+    return {r[0].upper() for r in cur.fetchall()}
+
+
+def _schema_problems(conn) -> tuple[list[str], dict[str, int]]:
+    """(문제 목록, 실제로 관측한 객체 수). 이름·폭·인덱스·제약·뷰·시퀀스를 전부 본다."""
+    expected = schema_map.parse_columns(DDL_DIR)
+    actual = _actual_columns(conn)
+    problems: list[str] = []
+
+    for table, columns in expected.items():
+        if table not in actual:
+            problems.append(f"missing table {table}")
+            continue
+        for name, column in sorted(columns.items()):
+            if name not in actual[table]:
+                problems.append(f"{table}.{name} missing")
+                continue
+            declared, found = column.byte_length, actual[table][name]
+            if declared is not None and found is not None and declared != found:
+                problems.append(
+                    f"{table}.{name} width {found} != DDL {declared}"
+                )
+
+    counts = {"tables": len(actual)}
+    for label, expected_names, sql in (
+        ("indexes", schema_map.parse_indexes(DDL_DIR), _SCHEMA_INDEXES),
+        ("constraints", schema_map.parse_constraints(DDL_DIR), _SCHEMA_CONSTRAINTS),
+        ("views", schema_map.parse_views(DDL_DIR), _SCHEMA_VIEWS),
+        ("sequences", schema_map.parse_sequences(DDL_DIR), _SCHEMA_SEQUENCES),
+    ):
+        found = _names(conn, sql)
+        counts[label] = len(found)
+        for name in sorted(expected_names - found):
+            problems.append(f"missing {label[:-1]} {name}")
+    return problems, counts
 
 
 def _check_timestamp_roundtrip(conn) -> CheckResult:
@@ -79,7 +152,7 @@ def _check_timestamp_roundtrip(conn) -> CheckResult:
         "oracledb가 aware datetime을 세션 타임존으로 변환한 뒤 자르고 있다는 뜻이다 "
         "— 저장된 모든 타임스탬프가 오프셋만큼 밀려 있다. 바인드 전에 tzinfo를 "
         "벗기거나 cursor.setinputsizes(oracledb.DB_TYPE_TIMESTAMP)로 명시할 것 "
-        "(spec §2.1, jira_dashboard/db/repository/history.py의 _as_utc와 짝을 "
+        "(spec §2.1, jira_dashboard/db/repository/history.py의 as_utc와 짝을 "
         "이루는 쓰기측 규약이 없다는 뜻이므로 만들어야 한다)"
     )
     if row is None:
@@ -132,11 +205,23 @@ def run_db_checks(conn, *, skip_schema: bool = False) -> list[CheckResult]:
         conn,
         "SELECT value FROM nls_database_parameters "
         "WHERE parameter = 'NLS_CHARACTERSET'",
-    ) or "?"
-    block = _one(conn, "SELECT value FROM v$parameter WHERE name = 'db_block_size'") or "?"
+    )
+    block = _one(conn, "SELECT value FROM v$parameter WHERE name = 'db_block_size'")
+    # 관측하지 못한 것에 PASS를 주지 않는다 (R34). DB4는 모든 truncate()가 깔고 있는
+    # "VARCHAR2 폭은 바이트다"라는 전제의 근거인데, 두 조회가 아무 행도 돌려주지
+    # 않아도 PASS를 찍고 있었다 — 근거가 없는데 근거가 있다고 보고한 셈이다.
+    missing_facts = [name for name, value in
+                     (("NLS_CHARACTERSET", charset), ("db_block_size", block))
+                     if not value]
     out.append(CheckResult(
-        "DB4", "캐릭터셋 / 블록 크기", "PASS", f"{charset} / {block}",
-        "기록용. VARCHAR2 BYTE 세만틱 전제(spec §2.2)의 근거가 된다",
+        "DB4", "캐릭터셋 / 블록 크기",
+        "PASS" if not missing_facts else "WARN",
+        f"{charset or '?'} / {block or '?'}",
+        "기록용. VARCHAR2 BYTE 세만틱 전제(spec §2.2)의 근거가 된다"
+        if not missing_facts else
+        f"{', '.join(missing_facts)}를 관측하지 못했다 — BYTE 세만틱 전제(spec §2.2)의 "
+        "근거가 비어 있다. 모든 truncate() 상한이 이 전제에 기대고 있으므로 "
+        "sqlplus로 직접 확인할 것",
     ))
 
     cur = conn.cursor()
@@ -157,28 +242,31 @@ def run_db_checks(conn, *, skip_schema: bool = False) -> list[CheckResult]:
         conn,
         r"SELECT COUNT(*) FROM user_tables WHERE table_name LIKE 'TEST\_%' ESCAPE '\'",
     )
+    # 여기도 무조건 PASS였다 (R34). 0개는 "DDL 미적용"이라는 관측이고, None은
+    # "관측 실패"다 — 둘 다 PASS가 아니다.
     out.append(CheckResult(
-        "DB6", "기존 TEST_ 객체", "PASS", f"{existing} tables",
-        "0이면 DDL을 아직 안 돌린 것이다. drop_all.sql 전에 목록을 눈으로 확인할 것",
+        "DB6", "기존 TEST_ 객체",
+        "PASS" if existing else "WARN",
+        "count 조회가 행을 돌려주지 않았다" if existing is None else f"{existing} tables",
+        "TEST_ 테이블이 0개다 — DDL을 아직 안 돌린 상태다 (런북 3단계 전이라면 정상, "
+        "4단계에서 이게 보이면 DDL이 적용되지 않았다는 뜻이다). drop_all.sql 전에는 "
+        "반드시 목록을 눈으로 확인할 것",
     ))
 
     out.append(_check_timestamp_roundtrip(conn))
 
     if not skip_schema:
-        expected = schema_map.parse_ddl(DDL_DIR)
-        actual = _actual_schema(conn)
-        problems = []
-        for table, columns in expected.items():
-            if table not in actual:
-                problems.append(f"missing table {table}")
-                continue
-            for column in sorted(columns - actual[table]):
-                problems.append(f"{table}.{column} missing")
+        problems, counts = _schema_problems(conn)
+        observed = ", ".join(f"{k}={v}" for k, v in counts.items())
         out.append(CheckResult(
             "DB7", "DDL 파일 ↔ 실제 스키마 대조",
             "PASS" if not problems else "FAIL",
-            "matches" if not problems else "; ".join(problems[:5]),
-            "DDL을 다시 적용해야 한다 (docs/ddl-apply.md). 자동으로 고치지 않는다",
+            (f"matches ({observed})" if not problems
+             else f"{observed}; " + "; ".join(problems[:5])
+                  + (f" (+{len(problems) - 5} more)" if len(problems) > 5 else "")),
+            "DDL을 다시 적용해야 한다 (docs/ddl-apply.md). 자동으로 고치지 않는다. "
+            "폭 불일치는 코드의 truncate 상한(jira_dashboard/jira/models.py)과 "
+            "어긋난다는 뜻이므로 ORA-12899가 예정되어 있다",
         ))
     return out
 

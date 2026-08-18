@@ -956,8 +956,11 @@ runner.py (인스턴스 단위 병렬 2~3, 인스턴스 내 프로젝트는 순�
 
 `expand=changelog`가 성능의 열쇠다. Jira DC의 search API는 이슈당 최대 100개의 이력 항목을
 인라인으로 함께 준다 — **이슈 100건과 그 이력 전체를 요청 1회로 받는다.** 이력이 100개를
-넘는 소수의 이슈만 `GET /issue/{key}?expand=changelog&startAt=...`로 보충한다.
-(응답의 `changelog.total > changelog.maxResults`로 판별한다.)
+넘는 이슈는 응답의 `changelog.total > changelog.maxResults`로 판별할 수 있지만, **DC 10.3에는
+나머지를 받아올 수단이 없다** — `/issue/{key}`에 `startAt`이 없고 changelog 전용 엔드포인트도
+없다 (아래 "changelog 보충 호출 — DC 10.3에는 페이징이 없다" 항과 R8/A3 참조). 그래서
+`_full_changelog`는 서버가 다른 슬라이스를 줄 가능성에만 대비해 보충을 시도하고, 진행이
+없으면 즉시 멈춘 뒤 `changelog_truncated`를 올린다.
 
 이슈마다 개별 호출하는 방식 대비 요청 수가 약 100분의 1이다.
 
@@ -1014,8 +1017,10 @@ R8/A3에서 확인된 대로 `GET /rest/api/2/issue/{issueIdOrKey}`의 쿼리 �
 않으면 changelog 페이징이 없는 서버에서 무한 루프에 빠지거나 같은 이력을 중복 적재한다.
 멈춘 경우 `changelog.total`보다 적게 수집됐다는 뜻이므로 WARNING 로그를 남기고
 `SyncResult.changelog_truncated`를 1 증가시켜, 이슈별 truncation을 사후에 집계할 수
-있게 한다. **Jira의 changelog는 오래된 것부터 오름차순**이므로 잘렸을 때 유실되는 쪽은
-최신 이력이 아니라 더 오래된 이력이다.
+있게 한다. **Jira의 changelog는 오래된 것부터 오름차순**이고 인라인 100건은 그중 가장 오래된
+100건이므로, 잘렸을 때 유실되는 쪽은 더 오래된 이력이 아니라 **최신 이력**이다. 그래서
+코드가 방어하는 쪽도 최신 끝점이다 — `build_intervals`의 "이력 종점이 현재값과 다르면
+현재값을 신뢰한다" 검사가 정확히 그 유실 구간을 덮는다 (5.3절).
 
 #### `fields=*all`에 대해
 

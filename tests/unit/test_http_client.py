@@ -108,3 +108,36 @@ def test_from_config_raises_when_secret_env_var_missing(monkeypatch):
 def test_token_never_appears_in_repr():
     c = HttpJiraClient("https://jira.example.com", "super-secret-token")
     assert "super-secret-token" not in repr(c)
+
+
+# --- Item 13: 404를 None으로 바꾸는 것은 get_issue에서만 ------------------------
+
+def test_404_on_the_field_catalog_raises_instead_of_returning_empty(monkeypatch):
+    """base_url에 컨텍스트 경로가 빠진 설정 오류가 "빈 카탈로그"로 위장하면,
+    EAV가 비고 이슈 0건으로 초록불 sync가 끝난다 — 조용한 전면 실패다."""
+    def handler(request):
+        return httpx.Response(404)
+
+    c = _client(handler, monkeypatch)
+    with pytest.raises(httpx.HTTPStatusError):
+        c.get_fields()
+
+
+def test_404_on_project_status_and_search_also_raise(monkeypatch):
+    def handler(request):
+        return httpx.Response(404)
+
+    c = _client(handler, monkeypatch)
+    for call in (c.get_projects, c.get_statuses,
+                 lambda: c.search_issues("project = X", 0, 100, True),
+                 lambda: c.get_issue_changelog("X-1", 0)):
+        with pytest.raises(httpx.HTTPStatusError):
+            call()
+
+
+def test_404_still_maps_to_none_for_get_issue_only(monkeypatch):
+    def handler(request):
+        return httpx.Response(404)
+
+    c = _client(handler, monkeypatch)
+    assert c.get_issue("10001", ["project"]) is None

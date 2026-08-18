@@ -5,9 +5,11 @@ docs/api-verification.md가 이미 정리해둔 상태(공개 문서로 확인�
 "필드가 있는지 보는" 검사가 아니라 실험이다 — total이 maxResults를 넘는 이슈를
 찾아 2차 호출이 새 항목을 주는지까지 실제로 측정한다.
 
-원칙: 관측하지 못한 것에 PASS를 주지 않는다. 증거가 없으면 WARN으로 그렇게
-말한다(A1의 페이징 미검증, A10의 user 미관측, A3의 프로브 이슈 없음이 전부 이
-패턴이다) — A4가 동일 타임스탬프에서 우연히 PASS하던 것을 막은 것과 같은 이유다.
+원칙(R34): 관측하지 못한 것에는 PASS도 FAIL도 주지 않는다 — WARN으로 그렇게
+말한다. A1의 페이징 미검증, A10의 user 미관측, A3의 프로브 이슈 없음, A4의
+타임스탬프 부족, 이슈가 없을 때의 A2/A6가 전부 이 패턴이다. A4는 원래 "측정
+불가"를 FAIL로 매핑하고 있었는데, 그건 이 원칙을 정확히 거꾸로 적용한 것이었다:
+FAIL은 "정렬이 내림차순임을 관측했다"일 때만 옳다.
 """
 from jira_dashboard.doctor.db_checks import CheckResult, format_report
 from jira_dashboard.jira.protocol import JiraAuthError
@@ -116,12 +118,21 @@ def _run_jira_checks(client, probe_project_key: str) -> list[CheckResult]:
     ))
 
     sample = page.issues[0] if page.issues else {}
-    inline = "changelog" in sample
-    out.append(CheckResult(
-        "A2", "expand=changelog 인라인 포함", "PASS" if inline else "FAIL",
-        f"present={inline}",
-        "이슈별 개별 호출로 폴백해야 한다 — 요청 수가 약 100배가 된다",
-    ))
+    # 이슈가 하나도 없으면 인라인 여부는 관측 대상이 아예 없다 — A1이 이미 그
+    # 사실을 FAIL로 보고했으므로 여기서 두 번째 FAIL을 만들지 않는다 (R34).
+    if not page.issues:
+        out.append(CheckResult(
+            "A2", "expand=changelog 인라인 포함", "WARN",
+            f"프로젝트 {probe_project_key}가 이슈를 하나도 돌려주지 않아 관측하지 못했다",
+            "이슈가 있는 프로젝트로 --project를 다시 지정할 것 (A1을 먼저 볼 것)",
+        ))
+    else:
+        inline = "changelog" in sample
+        out.append(CheckResult(
+            "A2", "expand=changelog 인라인 포함", "PASS" if inline else "FAIL",
+            f"present={inline}",
+            "이슈별 개별 호출로 폴백해야 한다 — 요청 수가 약 100배가 된다",
+        ))
 
     # --- A3: 인라인 changelog 상한을 실측한다 (조사만으로는 끝나지 않는 항목,
     # docs/api-verification.md A3). total > maxResults인 이슈를 찾아 2차 호출로
@@ -200,19 +211,41 @@ def _run_jira_checks(client, probe_project_key: str) -> list[CheckResult]:
         if len(set(stamps)) >= 2:
             ascending = stamps == sorted(stamps)
             break
-    out.append(CheckResult(
-        "A4", "changelog 오름차순", "PASS" if ascending else "FAIL",
-        f"ascending={ascending}",
-        "구간 테이블이 통째로 뒤집힌다. sync_issues 보충 호출과 "
-        "derive_history 정렬을 함께 수정할 것 (spec §5.2, §5.3)",
-    ))
+    # "측정하지 못했다"를 FAIL로 매핑하면, 이 모듈 docstring이 선언한 원칙(관측하지
+    # 못한 것에 판정을 주지 않는다)을 정확히 거꾸로 적용하는 것이 된다 (R34).
+    # 서로 다른 타임스탬프가 2개 이상인 이슈가 없으면 정렬은 판정 불가능하다.
+    if ascending is None:
+        out.append(CheckResult(
+            "A4", "changelog 오름차순", "WARN",
+            "서로 다른 changelog 타임스탬프가 2개 이상인 이슈가 없어 정렬을 "
+            "측정하지 못했다",
+            "이력이 여러 시각에 걸쳐 있는 이슈가 있는 프로젝트로 --project를 다시 "
+            "지정해 재확인할 것. 측정 없이는 derive_history의 정렬 전제(spec §5.3)가 "
+            "미검증 상태다 — 뒤집혀 있으면 구간 테이블이 통째로 뒤집힌다",
+        ))
+    else:
+        out.append(CheckResult(
+            "A4", "changelog 오름차순", "PASS" if ascending else "FAIL",
+            f"ascending={ascending}",
+            "구간 테이블이 통째로 뒤집힌다. sync_issues 보충 호출과 "
+            "derive_history 정렬을 함께 수정할 것 (spec §5.2, §5.3)",
+        ))
 
-    custom = [k for k in (sample.get("fields") or {}) if k.startswith("customfield_")]
-    out.append(CheckResult(
-        "A6", "fields=*all 이 커스텀 필드 반환", "PASS" if custom else "FAIL",
-        f"{len(custom)} custom fields",
-        "필요한 필드를 명시 나열해야 한다 — 새 필드 자동 수집이 불가능해진다",
-    ))
+    if not page.issues:
+        out.append(CheckResult(
+            "A6", "fields=*all 이 커스텀 필드 반환", "WARN",
+            "이슈를 하나도 받지 못해 관측하지 못했다",
+            "이슈가 있는 프로젝트로 --project를 다시 지정할 것 (A1을 먼저 볼 것)",
+        ))
+    else:
+        # 커스텀 필드는 이슈 하나에만 없을 수도 있다 — 받은 이슈 전체를 훑는다.
+        custom = {k for issue in page.issues
+                  for k in (issue.get("fields") or {}) if k.startswith("customfield_")}
+        out.append(CheckResult(
+            "A6", "fields=*all 이 커스텀 필드 반환", "PASS" if custom else "FAIL",
+            f"{len(custom)} custom fields",
+            "필요한 필드를 명시 나열해야 한다 — 새 필드 자동 수집이 불가능해진다",
+        ))
 
     # --- A10: reporter가 비어 있는 걸 "PASS"로 해석하지 않는다. 첫 이슈에 없으면
     # 응답받은 이슈들을 계속 훑어서 실제로 user 객체가 있는 것을 찾는다 — 하나도
