@@ -131,3 +131,61 @@ def test_field_pk_by_field_name_excludes_duplicated_name():
     result = catalog.field_pk_by_field_name(conn, 1)
     assert result == {"Summary": 10}
     assert "결함원인" not in result
+
+
+# --- instance/project 관리자 명령용 리포지토리 함수 ---
+
+def test_list_instances_returns_rows():
+    conn = _FakeConn([("SITE_A", "https://jira.internal", "PAT",
+                       "JIRA_SITE_A_TOKEN", "Y")])
+    assert catalog.list_instances(conn) == [
+        ("SITE_A", "https://jira.internal", "PAT", "JIRA_SITE_A_TOKEN", "Y")
+    ]
+
+
+def test_list_projects_returns_rows():
+    conn = _FakeConn([("TEST", "Test Project", "N")])
+    assert catalog.list_projects(conn, 1) == [("TEST", "Test Project", "N")]
+
+
+class _FakeEnableCursor:
+    def __init__(self, rowcount):
+        self.rowcount = rowcount
+        self.executed_with = None
+
+    def execute(self, sql, **kwargs):
+        self.executed_with = kwargs
+
+
+class _FakeEnableConn:
+    def __init__(self, rowcount):
+        self._rowcount = rowcount
+        self.cur = None
+
+    def cursor(self):
+        self.cur = _FakeEnableCursor(self._rowcount)
+        return self.cur
+
+
+def test_set_project_enabled_binds_y_and_returns_rowcount():
+    """CHECK 제약(test_ck_jira_project_en)은 'Y'/'N'만 받는다 — Python bool을
+    그대로 보내면 안 된다."""
+    conn = _FakeEnableConn(rowcount=1)
+    affected = catalog.set_project_enabled(conn, 1, "TEST", True)
+    assert affected == 1
+    assert conn.cur.executed_with == {
+        "instance_id": 1, "project_key": "TEST", "enabled": "Y",
+    }
+
+
+def test_set_project_enabled_binds_n_for_disable():
+    conn = _FakeEnableConn(rowcount=1)
+    catalog.set_project_enabled(conn, 1, "TEST", False)
+    assert conn.cur.executed_with["enabled"] == "N"
+
+
+def test_set_project_enabled_missing_key_reports_zero_rows_affected():
+    """존재하지 않는 project_key는 조용히 "성공"하면 안 된다 — 호출자가 rows
+    affected로 구분해야 한다."""
+    conn = _FakeEnableConn(rowcount=0)
+    assert catalog.set_project_enabled(conn, 1, "NOPE", True) == 0

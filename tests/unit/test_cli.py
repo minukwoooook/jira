@@ -1,5 +1,7 @@
 from contextlib import contextmanager
 
+import pytest
+
 from jira_dashboard import cli
 from jira_dashboard.pipeline.runner import RunSummary
 
@@ -122,3 +124,105 @@ def test_doctor_and_capture_use_read_only_connections(monkeypatch):
     cli.main(["doctor", "--db", "--skip-schema"])
     cli.main(["capture", "--instance", "SITE_A", "--project", "PROJ"])
     assert seen == [True, True]
+
+
+# --- instance/project bootstrap commands ---
+
+def _fake_db_conn_capturing(seen):
+    @contextmanager
+    def fake_db_conn(*, read_only=False):
+        seen.append(read_only)
+        yield object()
+    return fake_db_conn
+
+
+def test_instance_add_uses_a_committing_connection(monkeypatch):
+    """이 명령의 존재 이유가 MERGE를 커밋하는 것이다 — read_only=True면 조용히
+    아무 일도 안 일어난다."""
+    seen = []
+    monkeypatch.setattr("jira_dashboard.db.pool.db_conn", _fake_db_conn_capturing(seen))
+    monkeypatch.setattr("jira_dashboard.db.repository.catalog.upsert_instance",
+                        lambda *a, **k: 1)
+    exit_code = cli.main(["instance", "add", "--key", "SITE_A",
+                          "--base-url", "https://jira.internal",
+                          "--auth-type", "PAT", "--secret-ref", "JIRA_SITE_A_TOKEN"])
+    assert exit_code == 0
+    assert seen == [False]
+
+
+def test_instance_add_rejects_a_bad_auth_type():
+    """DDL의 test_ck_jira_instance_auth 위반을 Oracle 대신 argparse가 먼저 잡는다."""
+    with pytest.raises(SystemExit):
+        cli.main(["instance", "add", "--key", "SITE_A",
+                 "--base-url", "https://jira.internal",
+                 "--auth-type", "BOGUS", "--secret-ref", "JIRA_SITE_A_TOKEN"])
+
+
+def test_instance_add_warns_when_secret_ref_env_var_is_unset(monkeypatch, capsys):
+    seen = []
+    monkeypatch.delenv("JIRA_SITE_A_TOKEN", raising=False)
+    monkeypatch.setattr("jira_dashboard.db.pool.db_conn", _fake_db_conn_capturing(seen))
+    monkeypatch.setattr("jira_dashboard.db.repository.catalog.upsert_instance",
+                        lambda *a, **k: 1)
+    cli.main(["instance", "add", "--key", "SITE_A",
+             "--base-url", "https://jira.internal",
+             "--auth-type", "PAT", "--secret-ref", "JIRA_SITE_A_TOKEN"])
+    assert "JIRA_SITE_A_TOKEN" in capsys.readouterr().err
+
+
+def test_instance_list_uses_a_committing_connection(monkeypatch):
+    seen = []
+    monkeypatch.setattr("jira_dashboard.db.pool.db_conn", _fake_db_conn_capturing(seen))
+    monkeypatch.setattr("jira_dashboard.db.repository.catalog.list_instances",
+                        lambda conn: [])
+    cli.main(["instance", "list"])
+    assert seen == [False]
+
+
+def test_project_enable_uses_a_committing_connection(monkeypatch):
+    seen = []
+    monkeypatch.setattr("jira_dashboard.db.pool.db_conn", _fake_db_conn_capturing(seen))
+    monkeypatch.setattr("jira_dashboard.db.repository.catalog.instance_config",
+                        lambda conn, key: (1, "https://x", "PAT", "TOK"))
+    monkeypatch.setattr("jira_dashboard.db.repository.catalog.set_project_enabled",
+                        lambda *a, **k: 1)
+    exit_code = cli.main(["project", "enable", "--instance", "SITE_A", "--key", "TEST"])
+    assert exit_code == 0
+    assert seen == [False]
+
+
+def test_project_enable_missing_key_reports_not_found_not_success(monkeypatch):
+    """rows affected == 0이면 "성공"을 출력하지 않고, 먼저 sync를 돌리라고
+    알려준다 (catalog sync가 프로젝트를 발견하기 전에는 enable할 대상이 없다)."""
+    seen = []
+    monkeypatch.setattr("jira_dashboard.db.pool.db_conn", _fake_db_conn_capturing(seen))
+    monkeypatch.setattr("jira_dashboard.db.repository.catalog.instance_config",
+                        lambda conn, key: (1, "https://x", "PAT", "TOK"))
+    monkeypatch.setattr("jira_dashboard.db.repository.catalog.set_project_enabled",
+                        lambda *a, **k: 0)
+    with pytest.raises(SystemExit) as exc_info:
+        cli.main(["project", "enable", "--instance", "SITE_A", "--key", "NOPE"])
+    message = str(exc_info.value)
+    assert "no such project" in message
+    assert "sync" in message
+
+
+def test_project_disable_uses_a_committing_connection(monkeypatch):
+    seen = []
+    monkeypatch.setattr("jira_dashboard.db.pool.db_conn", _fake_db_conn_capturing(seen))
+    monkeypatch.setattr("jira_dashboard.db.repository.catalog.instance_config",
+                        lambda conn, key: (1, "https://x", "PAT", "TOK"))
+    monkeypatch.setattr("jira_dashboard.db.repository.catalog.set_project_enabled",
+                        lambda *a, **k: 1)
+    exit_code = cli.main(["project", "disable", "--instance", "SITE_A", "--key", "TEST"])
+    assert exit_code == 0
+    assert seen == [False]
+
+
+def test_project_list_reports_unknown_instance(monkeypatch):
+    seen = []
+    monkeypatch.setattr("jira_dashboard.db.pool.db_conn", _fake_db_conn_capturing(seen))
+    monkeypatch.setattr("jira_dashboard.db.repository.catalog.instance_config",
+                        lambda conn, key: None)
+    with pytest.raises(SystemExit):
+        cli.main(["project", "list", "--instance", "NOPE"])

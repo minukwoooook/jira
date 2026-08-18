@@ -1615,8 +1615,8 @@ DB 없이도 100% 검증되고, 동시에 가장 틀리기 쉬운 부분이다.
 
 ### 사내
 
-14. `doctor --db --skip-schema` → DDL 수동 적용 → `doctor --db` → `doctor --jira` (11.7절 런북)
-15. `capture` → `JIRA_FIXTURES=captured pytest` → `sync --dry-run` → `sync` ×3
+14. `doctor --db --skip-schema` → DDL 수동 적용 → `doctor --db` → `instance add` → `doctor --jira` (11.7절 런북)
+15. `capture` → `JIRA_FIXTURES=captured pytest` → `sync`(카탈로그 발견) → `project enable` → `sync --dry-run` → `sync` ×3
 16. FAIL 항목이 있으면 **사외로 돌아가 고치고 다시 반입** — 사내 즉석 수정 금지
 
 ### 다음 단계 (범위 밖)
@@ -1912,7 +1912,7 @@ pip install --no-index --find-links vendor/ -r requirements-dev.txt
 무시된 디렉터리는 클론에 존재하지 않으므로, 그냥 두면 런북 1단계가 빈 디렉터리를 보고
 실패한다. 무시 규칙 자체는 유지한다 — 로컬에서 받은 잡다한 wheel이 실수로 커밋되는
 것을 막는 용도다. **런타임 의존성은 `requirements.txt`, 테스트 의존성(`pytest`)은
-`requirements-dev.txt`**로 나눠 둔다. 번들과 사내 설치는 후자를 쓴다 — 런북 7단계가
+`requirements-dev.txt`**로 나눠 둔다. 번들과 사내 설치는 후자를 쓴다 — 런북 8단계가
 `pytest`를 요구하기 때문이고, `pytest`가 빠진 번들로는 7단계를 아예 실행할 수 없다.
 이 두 가지(추적 여부, pytest 포함 여부)는 `tests/static/test_offline_bundle.py`가 검사한다.
 
@@ -1982,27 +1982,44 @@ cli capture --project TEST --limit 200
  1. pip install --no-index --find-links vendor/ -r requirements-dev.txt
                                       vendor/는 .gitignore되어 있지만 `git add -f`로
                                       추적된다 — 반입이 git 단방향이므로 (11.4절).
-                                      dev 쪽을 쓰는 이유는 7단계가 pytest를 요구해서다
+                                      dev 쪽을 쓰는 이유는 8단계가 pytest를 요구해서다
  2. cli doctor --db --skip-schema     읽기 전용. 버전·권한·타임존·쿼터만 본다
                                       (테이블이 아직 없으므로 스키마 대조는 건너뛴다)
  ────── 권한이 부족하면 여기서 멈춘다 ──────
  3. @db/ddl/01_catalog.sql … 06_ops.sql        사람이 순서대로 실행 (11.1절)
  4. cli doctor --db                   이제 스키마 대조까지 포함해 전부 통과해야 한다
- 5. cli doctor --jira                 읽기 전용. A1~A12 결과를 기록
+ 5. cli instance add --key TEST --base-url https://jira.internal \
+        --auth-type PAT --secret-ref JIRA_TEST_TOKEN
+                                      TEST_JIRA_INSTANCE에 행을 넣는다 (MERGE라 재실행해도
+                                      안전). --secret-ref는 토큰이 아니라 토큰을 담은
+                                      환경변수의 *이름*이다 — 토큰 자체는 DB에 없다
+                                      (3.1절). JIRA_TEST_TOKEN을 미리 export해 둔다
+ 6. cli doctor --jira                 읽기 전용. A1~A12 결과를 기록 (5단계의 행이 있어야
+                                      instance_key를 풀 수 있다)
  ────── FAIL이 있으면 사외로 돌아가 고친다 ──────
- 6. cli capture --project TEST --limit 200
- 7. JIRA_FIXTURES=captured pytest     사외 스위트를 실데이터로 재실행
- 8. cli sync --project TEST --dry-run MERGE/INSERT까지 실제로 실행하되 커밋하지 않는다
- 9. cli sync --project TEST           첫 실제 수집 — SQL이 처음 실행되는 순간
-10. cli sync --project TEST           2회차 — 행 수 불변(멱등)
-11. cli sync --project TEST           3회차 — 동일
-12. 이슈 1건 상태 변경 후 재동기화      changelog 신규 행 + 구간 분할 확인
+ 7. cli capture --project TEST --limit 200
+ 8. JIRA_FIXTURES=captured pytest     사외 스위트를 실데이터로 재실행
+ 9. cli sync --instance TEST          카탈로그 동기화만 의미가 있다 — 활성화된 프로젝트가
+                                      아직 없으므로(is_enabled 기본값 'N') 이슈는 하나도
+                                      수집하지 않고, TEST_JIRA_PROJECT를 채우기만 한다
+10. cli project enable --instance TEST --key TEST
+                                      9단계가 발견한 프로젝트를 화이트리스트에 올린다.
+                                      cli project list --instance TEST로 먼저 확인해도 된다.
+                                      화이트리스트는 사람이 정한다 — sync_catalog는 절대
+                                      자동으로 켜지 않는다 (spec §5.1)
+11. cli sync --project TEST --dry-run MERGE/INSERT까지 실제로 실행하되 커밋하지 않는다
+12. cli sync --project TEST           첫 실제 수집 — SQL이 처음 실행되는 순간
+13. cli sync --project TEST           2회차 — 행 수 불변(멱등)
+14. cli sync --project TEST           3회차 — 동일
+15. 이슈 1건 상태 변경 후 재동기화      changelog 신규 행 + 구간 분할 확인
 ```
 
-**9단계가 이 프로젝트에서 가장 위험한 순간이다.** 사외에 DB가 없었으므로 모든 `MERGE`·`INSERT`
-문이 8~9단계에서 처음 실행된다 — 8단계(`--dry-run`)는 문장을 실제로 실행하지만 커밋하지
-않으므로 문법·컬럼명·FK 오류는 거기서 먼저 드러나고, 9단계는 그것이 처음 **커밋**되는
-순간이다. 그래서 8단계를 건너뛰지 않는다. 실패하면 대개 원인이 셋 중 하나다.
+**9단계와 12단계가 이 프로젝트에서 가장 위험한 두 순간이다.** 사외에 DB가 없었으므로 모든
+`MERGE`·`INSERT` 문이 여기서 처음 실행된다. 9단계(`sync --instance TEST`, 카탈로그 전용 —
+활성화된 프로젝트가 없어 이슈는 안 건드린다)가 `test_jira_project`/`test_jira_field` MERGE가
+처음 **커밋**되는 순간이고, 11단계(`--dry-run`)는 이슈 계열 INSERT/MERGE 문을 실제로
+실행하지만 커밋하지 않으므로 문법·컬럼명·FK 오류는 거기서 먼저 드러나며, 12단계는 그것이
+처음 커밋되는 순간이다. 그래서 11단계를 건너뛰지 않는다. 실패하면 대개 원인이 셋 중 하나다.
 
 | 증상 | 원인 | 확인 |
 |---|---|---|
@@ -2010,7 +2027,7 @@ cli capture --project TEST --limit 200
 | `ORA-00001: unique constraint violated` | MERGE의 `ON` 절 키가 잘못됨 | 그 테이블의 UNIQUE 제약과 `ON` 절을 대조한다 |
 | `ORA-02291: integrity constraint` | 적재 순서가 FK를 위반 | spec §5.2의 6단계 순서를 다시 확인한다 |
 
-**10~11단계를 건너뛰지 않는다.** 멱등성은 사외에서 전혀 검증되지 않았고, 깨져 있으면
+**13~14단계를 건너뛰지 않는다.** 멱등성은 사외에서 전혀 검증되지 않았고, 깨져 있으면
 행이 매 배치마다 늘어난다. 2·3회차의 행 수가 1회차와 같은지 반드시 눈으로 확인한다.
 
 ```sql
@@ -2020,7 +2037,7 @@ SELECT 'chglog',  COUNT(*)   FROM TEST_ISSUE_CHANGELOG UNION ALL
 SELECT 'history', COUNT(*)   FROM TEST_ISSUE_FIELD_HISTORY;
 ```
 
-5단계에서 FAIL이 나오면 **코드를 고치고 사외 테스트를 다시 통과시킨 뒤 반입한다.**
+6단계에서 FAIL이 나오면 **코드를 고치고 사외 테스트를 다시 통과시킨 뒤 반입한다.**
 사내에서 즉석으로 고치면 사외 테스트와 어긋나고, 단방향 반입이라 되돌리기 어렵다.
 
 ### 11.8 사외에서 검증할 수 없는 것 (인정하고 넘어가는 목록)
@@ -2030,17 +2047,17 @@ SELECT 'history', COUNT(*)   FROM TEST_ISSUE_FIELD_HISTORY;
 | 항목 | 왜 불가능한가 | 사내에서 언제 드러나나 |
 |---|---|---|
 | DDL이 실제로 실행되는가 | Oracle이 없다 | 런북 3단계 |
-| 제약조건이 실제로 막아주는가 (`CK`, 복합 FK) | 상동 | 런북 9단계 (또는 영원히 — 위반 데이터가 안 들어오면 모른다) |
-| `MERGE` 문의 문법과 `ON` 절 키 | 상동 | 런북 9단계 |
-| **멱등성** (연속 실행에 행 수 불변) | 상동 | 런북 10~11단계 |
-| BLOB 적재 (`setinputsizes`, gzip) | 상동 | 런북 9단계 |
-| 시퀀스 채번 (`CONNECT BY LEVEL`) | 상동 | 런북 9단계 |
+| 제약조건이 실제로 막아주는가 (`CK`, 복합 FK) | 상동 | 런북 12단계 (또는 영원히 — 위반 데이터가 안 들어오면 모른다) |
+| `MERGE` 문의 문법과 `ON` 절 키 | 상동 | 런북 9단계(카탈로그)·12단계(이슈) |
+| **멱등성** (연속 실행에 행 수 불변) | 상동 | 런북 13~14단계 |
+| BLOB 적재 (`setinputsizes`, gzip) | 상동 | 런북 12단계 |
+| 시퀀스 채번 (`CONNECT BY LEVEL`) | 상동 | 런북 12단계 |
 | `drop_all.sql`의 `ESCAPE` 동작 | 상동 | 처음 갈아엎을 때 — **남의 테이블이 지워지면 되돌릴 수 없다** |
 | 인덱스가 실제로 쓰이는가 | 실데이터가 없다 | 첫 전체 수집 |
 | 사내 Oracle의 권한·쿼터·타임존 파일 | 환경이 다르다 | `doctor --db` (런북 2단계) |
-| 4.0절 A1~A12 전부 | 실 Jira가 없다 | `doctor --jira` (런북 5단계) |
-| 실제 JQL 파서 동작 | Fake는 부분집합만 해석 | `sync --dry-run` (런북 8단계) |
-| HTTP 레이어 (타임아웃·프록시·커넥션) | Fake가 HTTP를 안 탄다 | 첫 `sync` (런북 9단계) |
+| 4.0절 A1~A12 전부 | 실 Jira가 없다 | `doctor --jira` (런북 6단계) |
+| 실제 JQL 파서 동작 | Fake는 부분집합만 해석 | `sync --dry-run` (런북 11단계) |
+| HTTP 레이어 (타임아웃·프록시·커넥션) | Fake가 HTTP를 안 탄다 | 첫 `sync` (런북 9·12단계) |
 
 `drop_all.sql` 항목이 특히 위험하다. `ESCAPE '\'`를 빠뜨리면 `_`가 와일드카드가 되어
 `TESTX...` 같은 남의 테이블까지 지우는데, **사외에서 이걸 실행해볼 수 없다.**

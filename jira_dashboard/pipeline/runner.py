@@ -29,7 +29,7 @@ def run_instance(conn, client, instance_id: int, *,
                  project: str | None = None) -> RunSummary:
     """인스턴스 내 프로젝트는 순차 처리한다. 병렬은 인스턴스 단위다 (spec §5.0).
 
-    project를 주면 화이트리스트를 그 프로젝트 키 하나로 좁힌다 — 런북 8~11단계의
+    project를 주면 화이트리스트를 그 프로젝트 키 하나로 좁힌다 — 런북 11~14단계의
     단계적 롤아웃(테스트 프로젝트 하나로 dry-run → 실수집 → 멱등 확인)이 이걸
     전제한다 (spec §11.7).
     """

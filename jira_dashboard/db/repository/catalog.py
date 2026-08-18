@@ -26,6 +26,12 @@ _SELECT_INSTANCE_ID = """
 SELECT instance_id FROM test_jira_instance WHERE instance_key = :instance_key
 """
 
+_SELECT_INSTANCES = """
+SELECT instance_key, base_url, auth_type, secret_ref, is_active
+FROM   test_jira_instance
+ORDER  BY instance_key
+"""
+
 _SELECT_PROJECTS = """
 SELECT jira_project_id, project_id, project_key
 FROM   test_jira_project WHERE instance_id = :instance_id
@@ -52,6 +58,19 @@ SELECT project_id, jira_project_id, project_key
 FROM   test_jira_project
 WHERE  instance_id = :instance_id AND is_enabled = 'Y'
 ORDER  BY project_key
+"""
+
+_SELECT_PROJECT_LIST = """
+SELECT project_key, name, is_enabled
+FROM   test_jira_project
+WHERE  instance_id = :instance_id
+ORDER  BY project_key
+"""
+
+_UPDATE_PROJECT_ENABLED = """
+UPDATE test_jira_project
+SET    is_enabled = :enabled
+WHERE  instance_id = :instance_id AND project_key = :project_key
 """
 
 _SELECT_FIELD_KINDS = """
@@ -127,6 +146,13 @@ def instance_config(conn, instance_key: str) -> tuple | None:
     return cur.fetchone()
 
 
+def list_instances(conn) -> list[tuple[str, str, str, str, str]]:
+    """(instance_key, base_url, auth_type, secret_ref, is_active) — `instance list`용."""
+    cur = conn.cursor()
+    cur.execute(_SELECT_INSTANCES)
+    return list(cur.fetchall())
+
+
 def upsert_projects(conn, instance_id: int, projects: list[dict]) -> list[int]:
     """is_enabled는 절대 덮지 않는다 — 화이트리스트는 사람이 정한다 (spec §5.1)."""
     cur = conn.cursor()
@@ -158,6 +184,23 @@ def enabled_projects(conn, instance_id: int) -> list[tuple[int, str, str]]:
     cur = conn.cursor()
     cur.execute(_SELECT_ENABLED, instance_id=instance_id)
     return list(cur.fetchall())
+
+
+def list_projects(conn, instance_id: int) -> list[tuple[str, str, str]]:
+    """(project_key, name, is_enabled) — `project list`용."""
+    cur = conn.cursor()
+    cur.execute(_SELECT_PROJECT_LIST, instance_id=instance_id)
+    return list(cur.fetchall())
+
+
+def set_project_enabled(conn, instance_id: int, project_key: str, enabled: bool) -> int:
+    """화이트리스트 토글. rows affected를 반환해 "켰다"와 "그런 프로젝트 없다"를
+    호출자가 구분하게 한다. CHECK 제약(test_ck_jira_project_en)이 요구하는
+    'Y'/'N' 문자로 바인딩한다 — Python bool을 그대로 보내지 않는다."""
+    cur = conn.cursor()
+    cur.execute(_UPDATE_PROJECT_ENABLED, instance_id=instance_id, project_key=project_key,
+                enabled="Y" if enabled else "N")
+    return cur.rowcount
 
 
 def upsert_fields(conn, instance_id: int, defs: list[FieldDef]) -> list[str]:
