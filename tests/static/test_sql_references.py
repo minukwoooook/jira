@@ -1,3 +1,4 @@
+import ast
 import importlib
 import inspect
 import pkgutil
@@ -31,13 +32,31 @@ def _repository_modules():
     return modules
 
 
+def _docstrings(source: str) -> set[str]:
+    """모듈/함수/클래스 docstring 텍스트 집합. docstring은 절대 SQL이 아니므로
+    SQL 리터럴 스캔에서 통째로 제외한다 — 예전에는 프로즈에 SELECT 같은 키워드와
+    test_*.py 파일명이 같이 나오면 이 게이트가 그걸 SQL의 TEST_ 테이블 참조로
+    오인했다. 문서를 SQL처럼 안 보이게 고쳐 쓰는 건 임시방편이고, 진짜 버그는
+    탐지기 쪽에 있었다 — docstring은 스캔 대상에서 원천적으로 뺀다."""
+    tree = ast.parse(source)
+    nodes = [tree] + [
+        n for n in ast.walk(tree)
+        if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
+    ]
+    return {doc for node in nodes
+           if (doc := ast.get_docstring(node, clean=False)) is not None}
+
+
 def _sql_literals(module) -> list[tuple[str, str]]:
-    """모듈의 소스에서 SQL로 보이는 문자열 리터럴을 뽑는다."""
+    """모듈의 소스에서 SQL로 보이는 문자열 리터럴을 뽑는다. docstring은 제외한다."""
     source = inspect.getsource(module)
+    docstrings = _docstrings(source)
     out = []
     for m in re.finditer(r'"""(.*?)"""|\'\'\'(.*?)\'\'\'|"([^"\n]{20,})"',
                          source, re.DOTALL):
         text = next(g for g in m.groups() if g is not None)
+        if text in docstrings:
+            continue
         if _LOOKS_LIKE_SQL.search(text):
             out.append((module.__name__, text))
     return out

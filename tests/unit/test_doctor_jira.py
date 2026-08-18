@@ -5,7 +5,9 @@ def _by_id(results): return {r.id: r for r in results}
 
 
 def test_fake_client_passes_every_assumption(fake_jira):
-    """Fake는 A1~A12 가정을 그대로 구현했으므로 전부 PASS여야 한다.
+    """Fake는 A1~A12 가정을 그대로 구현했으므로 FAIL은 하나도 없어야 한다 —
+    A1/A10처럼 이 작은 synthetic fixture로는 실측이 안 되는 항목은 정직하게
+    WARN을 내는 게 맞고(증거 없이 PASS를 주지 않는다), FAIL은 절대 안 된다.
     사내에서 FAIL이 나오면 그것이 정확히 가정이 깨진 지점이다."""
     failures = [r for r in run_jira_checks(fake_jira, "PROJ") if r.verdict == "FAIL"]
     assert failures == [], [(r.id, r.observed) for r in failures]

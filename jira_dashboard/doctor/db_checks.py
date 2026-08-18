@@ -3,11 +3,18 @@
 유일한 예외는 DB8(타임스탬프 바인드 왕복)이며, 이것도 dual 한 줄짜리 조회로만
 확인하고 테이블을 만들거나 쓰지 않는다.
 
-이 모듈은 정적 SQL 게이트(SCANNED_PACKAGES)에 포함된다. DB7의 스키마 대조 질의처럼
-TEST_ 테이블/컬럼을 참조하는 부분은 그 게이트가 검증하지만, DB1~DB6과 DB8은 Oracle
-딕셔너리 뷰/의사테이블(버전, 파라미터, 권한, 타임존, dual)만 참조하고 애플리케이션
-테이블은 전혀 언급하지 않으므로 그 게이트가 봐도 걸러낼 게 없다 — 그쪽은 여전히
-fake-cursor 단위 테스트로만 검증된다.
+이 모듈은 정적 SQL 게이트(SCANNED_PACKAGES)의 스캔 대상이지만, 지금 이 파일의
+SQL 문자열 중 그 게이트가 실제로 검증하는 것은 하나도 없다. DB1~DB6, DB8은 전부
+Oracle 딕셔너리 뷰/의사테이블(v$version, v$parameter, v$timezone_names,
+user_sys_privs, user_tables, user_tab_columns, dual)만 참조하고 애플리케이션의
+TEST_ 테이블을 전혀 언급하지 않는다. TEST_ 라는 글자가 나오는 유일한 자리는
+DB6/DB7의 LIKE 이스케이프 패턴(밑줄 앞에 이스케이프 문자를 붙여 Oracle LIKE의
+와일드카드 의미를 지운 것)인데, 게이트의 테이블 토큰 정규식은 TEST_ 바로 뒤에
+그 이스케이프 문자가 끼어 있으면 매치하지 못한다 — 그래서 실제 테이블명이 아닌
+이 패턴은 게이트에 걸리지 않는다. DB7의 스키마 대조 자체도 SQL 문자열이 아니라
+Python 딕셔너리 비교(schema_map.parse_ddl vs _actual_schema)로 이뤄지므로
+애초에 이 게이트가 볼 자리가 없다. DB7은 오직 Python 레벨 테스트
+(test_schema_check_passes_when_actual_matches_real_ddl)로만 검증된다.
 """
 from dataclasses import dataclass
 from datetime import datetime, timezone
