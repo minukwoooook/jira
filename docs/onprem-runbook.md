@@ -18,6 +18,7 @@
 | Python 3.12 | `python3 --version` |
 | Oracle 19c 접속 정보 | DSN, 전용 스키마 계정/비밀번호 |
 | 스키마 권한 | `CREATE SESSION`, `CREATE TABLE`, `CREATE SEQUENCE`, `CREATE VIEW` + 테이블스페이스 쿼터 |
+| **`SELECT_CATALOG_ROLE`** | `doctor --db`가 `v$version`/`v$parameter`/`v$timezone_names`를 읽는다(2단계). 없으면 `ORA-00942`로 해당 검사가 WARN으로 내려앉는다 — DDL 자체는 막히지 않지만 버전/타임존 사전 확인을 못 한다. DBA에게 미리 요청해둔다 |
 | **Oracle Instant Client** | thick 모드 필수(`DPY-3015` 회피, design.md §5.7) — 설치 경로를 알아둔다. 사내 다른 시스템도 thick 모드를 쓰므로 대개 서버에 이미 있다 |
 | Jira PAT | 대상 Jira DC 인스턴스의 Personal Access Token (읽기 권한이면 충분) |
 | SQL 클라이언트 | `sqlplus` 등, DDL 파일을 실행할 수 있는 것 |
@@ -375,6 +376,7 @@ python -m jira_dashboard.cli sync --instance SITE_A --daily
 | 수집이 0건인데 성공 | `--base-url`에 context path 누락 | 5단계 URL 확인. `doctor --jira`의 A8/A11이 잡아준다 |
 | 인증 실패 | `--secret-ref`가 가리키는 환경변수 미설정 | `doctor --jira`의 A12가 FAIL로 알려준다 |
 | `DPY-3015: password verifier ... not supported` | 사내 Oracle 계정이 thin 모드가 이해 못하는 구형 비밀번호 검증자를 쓴다 | thick 모드가 기본이라 이미 처리돼 있어야 한다(`db/pool.py`가 `oracledb.init_oracle_client` 호출). Instant Client가 설치돼 있고 `ORACLE_CLIENT_LIB_DIR`(또는 시스템 라이브러리 경로)이 맞는지 확인 |
+| `doctor --db`의 특정 항목이 `ORA-00942: table or view does not exist`를 `observed`에 담고 WARN | 그 검사가 읽는 `v$` 뷰(`v$parameter` 등)에 대한 권한이 계정에 없다 | DDL 3종(`CREATE TABLE`/`SEQUENCE`/`VIEW`) 권한만으로는 `v$` 뷰가 안 보인다 — DBA에게 `SELECT_CATALOG_ROLE`을 요청. **다른 검사는 계속 실행된다** — 이 한 항목만 WARN으로 내려앉고 DB5(DDL 권한)·DB8(타임스탬프 왕복) 등은 영향받지 않는다 |
 | `DPY-4011`/`DPY-6000` 계열, Instant Client를 못 찾음 | Instant Client 미설치 또는 `ORACLE_CLIENT_LIB_DIR` 경로 오류 | Instant Client가 이미 서버에 있는지 먼저 확인(다른 사내 시스템도 thick 모드를 쓰므로 대개 있다). 없으면 사외로 돌아가 Instant Client 반입 방법부터 정한다(design.md §11.4) |
 | 2회차에 행이 늘어남 | 멱등성 깨짐 | **진행 중단.** 어느 테이블이 늘었는지 확인해 사외로 보고 |
 

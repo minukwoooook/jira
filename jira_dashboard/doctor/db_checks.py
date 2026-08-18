@@ -18,9 +18,12 @@ Python 레벨 테스트(tests/unit/test_doctor_db.py)로만 검증되며, 그 �
 DDL에서 만든 딕셔너리 응답을 먹여 이름·폭·인덱스·제약·뷰·시퀀스 대조를 모두
 확인한다 (R33).
 """
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+
+import oracledb
 
 from jira_dashboard.db import schema_map
 from jira_dashboard.jira.models import KST, SENTINEL
@@ -74,6 +77,24 @@ class CheckResult:
     verdict: str        # PASS | FAIL | WARN
     observed: str
     impact: str
+
+
+@contextmanager
+def _degrade_to_warn(out: list[CheckResult], check_id: str, title: str):
+    """블록 안의 조회가 ORA- 오류로 실패하면(전형적으로 v$/딕셔너리 뷰에 대한 권한
+    부족 — 예: SELECT_CATALOG_ROLE 없이 v$parameter를 읽으려다 ORA-00942) 이 검사
+    하나만 WARN으로 내려앉히고 나머지 검사는 계속 진행한다. 권한이 빠진 뷰 하나
+    때문에 doctor --db 전체가 죽어서 DB5(DDL 권한)나 DB8(타임스탬프 왕복)처럼
+    전혀 다른 걸 보는 검사까지 실행되지 않는 것을 막는다."""
+    try:
+        yield
+    except oracledb.DatabaseError as e:
+        out.append(CheckResult(
+            check_id, title, "WARN", str(e).strip(),
+            "조회 자체가 실패했다 — 이 계정에 v$/딕셔너리 뷰 조회 권한이 없을 가능성이 "
+            "높다. DBA에게 SELECT_CATALOG_ROLE(또는 해당 v$ 뷰에 대한 개별 SELECT) "
+            "권한을 요청한 뒤 다시 실행할 것",
+        ))
 
 
 def _one(conn, sql, **binds):
@@ -183,91 +204,99 @@ def _check_timestamp_roundtrip(conn) -> CheckResult:
 def run_db_checks(conn, *, skip_schema: bool = False) -> list[CheckResult]:
     out: list[CheckResult] = []
 
-    banner = _one(conn, "SELECT banner_full FROM v$version") or ""
-    out.append(CheckResult(
-        "DB1", "Oracle 버전이 19c인가", "PASS" if "19" in banner else "FAIL",
-        banner, "상위 버전이면 spec §2.4의 문법 전제를 재검토해야 한다",
-    ))
+    with _degrade_to_warn(out, "DB1", "Oracle 버전이 19c인가"):
+        banner = _one(conn, "SELECT banner_full FROM v$version") or ""
+        out.append(CheckResult(
+            "DB1", "Oracle 버전이 19c인가", "PASS" if "19" in banner else "FAIL",
+            banner, "상위 버전이면 spec §2.4의 문법 전제를 재검토해야 한다",
+        ))
 
-    mss = _one(conn, "SELECT value FROM v$parameter WHERE name = 'max_string_size'") or "?"
-    out.append(CheckResult(
-        "DB2", "max_string_size", "PASS" if mss == "STANDARD" else "WARN", mss,
-        "EXTENDED면 VARCHAR2 상한이 32767이 되어 컬럼 폭 설계를 다시 볼 수 있다",
-    ))
+    with _degrade_to_warn(out, "DB2", "max_string_size"):
+        mss = _one(conn, "SELECT value FROM v$parameter WHERE name = 'max_string_size'") or "?"
+        out.append(CheckResult(
+            "DB2", "max_string_size", "PASS" if mss == "STANDARD" else "WARN", mss,
+            "EXTENDED면 VARCHAR2 상한이 32767이 되어 컬럼 폭 설계를 다시 볼 수 있다",
+        ))
 
-    tz = _one(conn, "SELECT COUNT(*) FROM v$timezone_names WHERE tzname = 'Asia/Seoul'")
-    out.append(CheckResult(
-        "DB3", "Asia/Seoul 타임존 파일", "PASS" if tz else "FAIL", str(tz),
-        "없으면 AT TIME ZONE 버킷팅이 실패한다. 고정 오프셋으로 폴백해야 한다",
-    ))
+    with _degrade_to_warn(out, "DB3", "Asia/Seoul 타임존 파일"):
+        tz = _one(conn, "SELECT COUNT(*) FROM v$timezone_names WHERE tzname = 'Asia/Seoul'")
+        out.append(CheckResult(
+            "DB3", "Asia/Seoul 타임존 파일", "PASS" if tz else "FAIL", str(tz),
+            "없으면 AT TIME ZONE 버킷팅이 실패한다. 고정 오프셋으로 폴백해야 한다",
+        ))
 
-    charset = _one(
-        conn,
-        "SELECT value FROM nls_database_parameters "
-        "WHERE parameter = 'NLS_CHARACTERSET'",
-    )
-    block = _one(conn, "SELECT value FROM v$parameter WHERE name = 'db_block_size'")
-    # 관측하지 못한 것에 PASS를 주지 않는다 (R34). DB4는 모든 truncate()가 깔고 있는
-    # "VARCHAR2 폭은 바이트다"라는 전제의 근거인데, 두 조회가 아무 행도 돌려주지
-    # 않아도 PASS를 찍고 있었다 — 근거가 없는데 근거가 있다고 보고한 셈이다.
-    missing_facts = [name for name, value in
-                     (("NLS_CHARACTERSET", charset), ("db_block_size", block))
-                     if not value]
-    out.append(CheckResult(
-        "DB4", "캐릭터셋 / 블록 크기",
-        "PASS" if not missing_facts else "WARN",
-        f"{charset or '?'} / {block or '?'}",
-        "기록용. VARCHAR2 BYTE 세만틱 전제(spec §2.2)의 근거가 된다"
-        if not missing_facts else
-        f"{', '.join(missing_facts)}를 관측하지 못했다 — BYTE 세만틱 전제(spec §2.2)의 "
-        "근거가 비어 있다. 모든 truncate() 상한이 이 전제에 기대고 있으므로 "
-        "sqlplus로 직접 확인할 것",
-    ))
+    with _degrade_to_warn(out, "DB4", "캐릭터셋 / 블록 크기"):
+        charset = _one(
+            conn,
+            "SELECT value FROM nls_database_parameters "
+            "WHERE parameter = 'NLS_CHARACTERSET'",
+        )
+        block = _one(conn, "SELECT value FROM v$parameter WHERE name = 'db_block_size'")
+        # 관측하지 못한 것에 PASS를 주지 않는다 (R34). DB4는 모든 truncate()가 깔고 있는
+        # "VARCHAR2 폭은 바이트다"라는 전제의 근거인데, 두 조회가 아무 행도 돌려주지
+        # 않아도 PASS를 찍고 있었다 — 근거가 없는데 근거가 있다고 보고한 셈이다.
+        missing_facts = [name for name, value in
+                         (("NLS_CHARACTERSET", charset), ("db_block_size", block))
+                         if not value]
+        out.append(CheckResult(
+            "DB4", "캐릭터셋 / 블록 크기",
+            "PASS" if not missing_facts else "WARN",
+            f"{charset or '?'} / {block or '?'}",
+            "기록용. VARCHAR2 BYTE 세만틱 전제(spec §2.2)의 근거가 된다"
+            if not missing_facts else
+            f"{', '.join(missing_facts)}를 관측하지 못했다 — BYTE 세만틱 전제(spec §2.2)의 "
+            "근거가 비어 있다. 모든 truncate() 상한이 이 전제에 기대고 있으므로 "
+            "sqlplus로 직접 확인할 것",
+        ))
 
-    cur = conn.cursor()
-    cur.execute(
-        "SELECT privilege FROM user_sys_privs "
-        "WHERE privilege IN ('CREATE TABLE', 'CREATE SEQUENCE', 'CREATE VIEW')"
-    )
-    granted = {r[0] for r in cur.fetchall()}
-    needed = {"CREATE TABLE", "CREATE SEQUENCE", "CREATE VIEW"}
-    missing = needed - granted
-    out.append(CheckResult(
-        "DB5", "DDL 권한", "PASS" if not missing else "FAIL",
-        ", ".join(sorted(granted)) or "(none)",
-        f"부족: {', '.join(sorted(missing)) or '없음'} — DDL 실행이 실패한다",
-    ))
+    with _degrade_to_warn(out, "DB5", "DDL 권한"):
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT privilege FROM user_sys_privs "
+            "WHERE privilege IN ('CREATE TABLE', 'CREATE SEQUENCE', 'CREATE VIEW')"
+        )
+        granted = {r[0] for r in cur.fetchall()}
+        needed = {"CREATE TABLE", "CREATE SEQUENCE", "CREATE VIEW"}
+        missing = needed - granted
+        out.append(CheckResult(
+            "DB5", "DDL 권한", "PASS" if not missing else "FAIL",
+            ", ".join(sorted(granted)) or "(none)",
+            f"부족: {', '.join(sorted(missing)) or '없음'} — DDL 실행이 실패한다",
+        ))
 
-    existing = _one(
-        conn,
-        r"SELECT COUNT(*) FROM user_tables WHERE table_name LIKE 'TEST\_%' ESCAPE '\'",
-    )
-    # 여기도 무조건 PASS였다 (R34). 0개는 "DDL 미적용"이라는 관측이고, None은
-    # "관측 실패"다 — 둘 다 PASS가 아니다.
-    out.append(CheckResult(
-        "DB6", "기존 TEST_ 객체",
-        "PASS" if existing else "WARN",
-        "count 조회가 행을 돌려주지 않았다" if existing is None else f"{existing} tables",
-        "TEST_ 테이블이 0개다 — DDL을 아직 안 돌린 상태다 (런북 3단계 전이라면 정상, "
-        "4단계에서 이게 보이면 DDL이 적용되지 않았다는 뜻이다). drop_all.sql 전에는 "
-        "반드시 목록을 눈으로 확인할 것",
-    ))
+    with _degrade_to_warn(out, "DB6", "기존 TEST_ 객체"):
+        existing = _one(
+            conn,
+            r"SELECT COUNT(*) FROM user_tables WHERE table_name LIKE 'TEST\_%' ESCAPE '\'",
+        )
+        # 여기도 무조건 PASS였다 (R34). 0개는 "DDL 미적용"이라는 관측이고, None은
+        # "관측 실패"다 — 둘 다 PASS가 아니다.
+        out.append(CheckResult(
+            "DB6", "기존 TEST_ 객체",
+            "PASS" if existing else "WARN",
+            "count 조회가 행을 돌려주지 않았다" if existing is None else f"{existing} tables",
+            "TEST_ 테이블이 0개다 — DDL을 아직 안 돌린 상태다 (런북 3단계 전이라면 정상, "
+            "4단계에서 이게 보이면 DDL이 적용되지 않았다는 뜻이다). drop_all.sql 전에는 "
+            "반드시 목록을 눈으로 확인할 것",
+        ))
 
-    out.append(_check_timestamp_roundtrip(conn))
+    with _degrade_to_warn(out, "DB8", "TIMESTAMP 바인드 왕복 (aware → naive 컬럼)"):
+        out.append(_check_timestamp_roundtrip(conn))
 
     if not skip_schema:
-        problems, counts = _schema_problems(conn)
-        observed = ", ".join(f"{k}={v}" for k, v in counts.items())
-        out.append(CheckResult(
-            "DB7", "DDL 파일 ↔ 실제 스키마 대조",
-            "PASS" if not problems else "FAIL",
-            (f"matches ({observed})" if not problems
-             else f"{observed}; " + "; ".join(problems[:5])
-                  + (f" (+{len(problems) - 5} more)" if len(problems) > 5 else "")),
-            "DDL을 다시 적용해야 한다 (docs/ddl-apply.md). 자동으로 고치지 않는다. "
-            "폭 불일치는 코드의 truncate 상한(jira_dashboard/jira/models.py)과 "
-            "어긋난다는 뜻이므로 ORA-12899가 예정되어 있다",
-        ))
+        with _degrade_to_warn(out, "DB7", "DDL 파일 ↔ 실제 스키마 대조"):
+            problems, counts = _schema_problems(conn)
+            observed = ", ".join(f"{k}={v}" for k, v in counts.items())
+            out.append(CheckResult(
+                "DB7", "DDL 파일 ↔ 실제 스키마 대조",
+                "PASS" if not problems else "FAIL",
+                (f"matches ({observed})" if not problems
+                 else f"{observed}; " + "; ".join(problems[:5])
+                      + (f" (+{len(problems) - 5} more)" if len(problems) > 5 else "")),
+                "DDL을 다시 적용해야 한다 (docs/ddl-apply.md). 자동으로 고치지 않는다. "
+                "폭 불일치는 코드의 truncate 상한(jira_dashboard/jira/models.py)과 "
+                "어긋난다는 뜻이므로 ORA-12899가 예정되어 있다",
+            ))
     return out
 
 

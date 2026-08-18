@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 from pathlib import Path
 
+import oracledb
 import pytest
 
 from jira_dashboard.doctor.db_checks import run_db_checks
@@ -17,6 +18,8 @@ class FakeCursor:
     def execute(self, sql, **binds):
         for key, rows in self._answers.items():
             if key in sql:
+                if isinstance(rows, BaseException):
+                    raise rows
                 self._rows = rows
                 return
         self._rows = []
@@ -270,3 +273,26 @@ def test_db6_warns_when_the_count_query_returned_nothing():
 def test_db6_passes_when_tables_are_present():
     r = _by_id(run_db_checks(_conn(), skip_schema=True))
     assert r["DB6"].verdict == "PASS"
+
+
+# --- 실측 발견: v$parameter 조회 권한이 없으면 ORA-00942로 doctor --db 전체가 죽었다.
+# 사내 계정이 CREATE SESSION/TABLE/SEQUENCE/VIEW만 받고 SELECT_CATALOG_ROLE 없이
+# v$ 뷰를 읽으려다 실제로 겪은 상황이다 — 뷰 하나에 대한 권한 부족이 DB5(DDL 권한)
+# 처럼 전혀 무관한 검사까지 실행을 막아서는 안 된다.
+
+def test_privilege_error_on_one_check_degrades_to_warn_not_a_crash():
+    err = oracledb.DatabaseError("ORA-00942: table or view does not exist")
+    conn = _conn(**{"max_string_size": err})
+    r = _by_id(run_db_checks(conn, skip_schema=True))
+    assert r["DB2"].verdict == "WARN"
+    assert "ORA-00942" in r["DB2"].observed
+
+
+def test_privilege_error_on_one_check_does_not_block_the_others():
+    err = oracledb.DatabaseError("ORA-00942: table or view does not exist")
+    conn = _conn(**{"max_string_size": err})
+    r = _by_id(run_db_checks(conn, skip_schema=True))
+    assert r["DB1"].verdict == "PASS"
+    assert r["DB3"].verdict == "PASS"
+    assert r["DB5"].verdict == "PASS"
+    assert r["DB8"].verdict == "PASS"
