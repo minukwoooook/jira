@@ -26,12 +26,13 @@ def test_varchar2_always_declares_byte_semantics(ddl_dir):
     assert offenders == [], offenders
 
 
-def test_defaults_use_utc(ddl_dir):
-    """DEFAULT SYSTIMESTAMP 는 세션 타임존에 따라 값이 흔들린다 (spec 2.1)."""
+def test_defaults_use_kst(ddl_dir):
+    """DEFAULT SYSTIMESTAMP 는 세션 타임존에 따라 값이 흔들린다 (spec 2.1). 저장 규약은
+    KST이므로 UTC로 정규화한 뒤 고정 +9시간을 더한 표현이어야 한다."""
     text = schema_map.ddl_text(ddl_dir)
     bare = re.findall(r"DEFAULT\s+SYSTIMESTAMP", text, re.IGNORECASE)
     assert bare == [], bare
-    assert "SYS_EXTRACT_UTC(SYSTIMESTAMP)" in text
+    assert "SYS_EXTRACT_UTC(SYSTIMESTAMP) + INTERVAL '9' HOUR" in text
 
 
 def test_no_syntax_newer_than_19c(ddl_dir):

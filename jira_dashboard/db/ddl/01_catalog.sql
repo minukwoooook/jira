@@ -5,8 +5,8 @@ CREATE TABLE test_jira_instance (
   auth_type     VARCHAR2(10 BYTE)   DEFAULT 'PAT' NOT NULL,
   secret_ref    VARCHAR2(200 BYTE)  NOT NULL,
   is_active     CHAR(1 BYTE)        DEFAULT 'Y' NOT NULL,
-  created_at    TIMESTAMP           DEFAULT SYS_EXTRACT_UTC(SYSTIMESTAMP) NOT NULL,
-  updated_at    TIMESTAMP           DEFAULT SYS_EXTRACT_UTC(SYSTIMESTAMP) NOT NULL,
+  created_at    TIMESTAMP           DEFAULT (SYS_EXTRACT_UTC(SYSTIMESTAMP) + INTERVAL '9' HOUR) NOT NULL,
+  updated_at    TIMESTAMP           DEFAULT (SYS_EXTRACT_UTC(SYSTIMESTAMP) + INTERVAL '9' HOUR) NOT NULL,
   CONSTRAINT test_pk_jira_instance      PRIMARY KEY (instance_id),
   CONSTRAINT test_uq_jira_instance_key  UNIQUE (instance_key),
   CONSTRAINT test_ck_jira_instance_auth CHECK (auth_type IN ('PAT','BASIC')),
@@ -20,8 +20,8 @@ CREATE TABLE test_jira_project (
   project_key      VARCHAR2(50 BYTE)  NOT NULL,
   name             VARCHAR2(255 BYTE),
   is_enabled       CHAR(1 BYTE)       DEFAULT 'N' NOT NULL,
-  created_at       TIMESTAMP          DEFAULT SYS_EXTRACT_UTC(SYSTIMESTAMP) NOT NULL,
-  updated_at       TIMESTAMP          DEFAULT SYS_EXTRACT_UTC(SYSTIMESTAMP) NOT NULL,
+  created_at       TIMESTAMP          DEFAULT (SYS_EXTRACT_UTC(SYSTIMESTAMP) + INTERVAL '9' HOUR) NOT NULL,
+  updated_at       TIMESTAMP          DEFAULT (SYS_EXTRACT_UTC(SYSTIMESTAMP) + INTERVAL '9' HOUR) NOT NULL,
   CONSTRAINT test_pk_jira_project      PRIMARY KEY (project_id),
   CONSTRAINT test_uq_jira_project      UNIQUE (instance_id, jira_project_id),
   CONSTRAINT test_fk_jira_project_inst FOREIGN KEY (instance_id)
@@ -46,8 +46,8 @@ CREATE TABLE test_jira_field (
   label_column_name VARCHAR2(30 BYTE),          -- 표시용 컬럼 (없으면 column_name 그대로)
   is_dimension  CHAR(1 BYTE)        DEFAULT 'Y' NOT NULL,
   is_measure    CHAR(1 BYTE)        DEFAULT 'N' NOT NULL,
-  first_seen_at TIMESTAMP           DEFAULT SYS_EXTRACT_UTC(SYSTIMESTAMP) NOT NULL,
-  last_seen_at  TIMESTAMP           DEFAULT SYS_EXTRACT_UTC(SYSTIMESTAMP) NOT NULL,
+  first_seen_at TIMESTAMP           DEFAULT (SYS_EXTRACT_UTC(SYSTIMESTAMP) + INTERVAL '9' HOUR) NOT NULL,
+  last_seen_at  TIMESTAMP           DEFAULT (SYS_EXTRACT_UTC(SYSTIMESTAMP) + INTERVAL '9' HOUR) NOT NULL,
   CONSTRAINT test_pk_jira_field       PRIMARY KEY (field_pk),
   CONSTRAINT test_uq_jira_field       UNIQUE (instance_id, field_id),
   CONSTRAINT test_fk_jira_field_inst  FOREIGN KEY (instance_id)

@@ -32,11 +32,11 @@ USING (
 WHEN MATCHED THEN UPDATE SET
   t.issue_count = s.issue_count,
   t.distinct_value_count = s.distinct_value_count,
-  t.last_profiled_at = SYS_EXTRACT_UTC(SYSTIMESTAMP)
+  t.last_profiled_at = (SYS_EXTRACT_UTC(SYSTIMESTAMP) + INTERVAL '9' HOUR)
 WHEN NOT MATCHED THEN
   INSERT (project_id, field_pk, issue_count, distinct_value_count, last_profiled_at)
   VALUES (s.project_id, s.field_pk, s.issue_count, s.distinct_value_count,
-          SYS_EXTRACT_UTC(SYSTIMESTAMP))
+          (SYS_EXTRACT_UTC(SYSTIMESTAMP) + INTERVAL '9' HOUR))
 """
 
 MERGE_COLUMN_COUNTS = """
@@ -45,11 +45,11 @@ USING (SELECT :project_id AS project_id, :field_pk AS field_pk FROM dual) s
 ON (t.project_id = s.project_id AND t.field_pk = s.field_pk)
 WHEN MATCHED THEN UPDATE SET t.issue_count = :issue_count,
      t.distinct_value_count = :distinct_value_count,
-     t.last_profiled_at = SYS_EXTRACT_UTC(SYSTIMESTAMP)
+     t.last_profiled_at = (SYS_EXTRACT_UTC(SYSTIMESTAMP) + INTERVAL '9' HOUR)
 WHEN NOT MATCHED THEN
   INSERT (project_id, field_pk, issue_count, distinct_value_count, last_profiled_at)
   VALUES (:project_id, :field_pk, :issue_count, :distinct_value_count,
-          SYS_EXTRACT_UTC(SYSTIMESTAMP))
+          (SYS_EXTRACT_UTC(SYSTIMESTAMP) + INTERVAL '9' HOUR))
 """
 
 SELECT_AXIS_CANDIDATES = """

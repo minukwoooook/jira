@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 
 from jira_dashboard.db.repository import history as history_repo
-from jira_dashboard.jira.models import ChangelogItem
+from jira_dashboard.jira.models import KST, ChangelogItem
 
 
 def _item(**overrides):
@@ -148,8 +148,8 @@ def test_from_str_and_to_str_are_truncated_to_4000_bytes():
 
 
 # --- Critical fix 1: Oracle TIMESTAMP columns come back naive; every timestamp in
-# this pipeline is UTC by convention (spec §2.1) and build_intervals compares them
-# against the UTC-aware SENTINEL. Read-path normalization must not be skipped. ---
+# this pipeline is KST by convention (spec §2.1) and build_intervals compares them
+# against the KST-aware SENTINEL. Read-path normalization must not be skipped. ---
 
 def test_load_issue_states_normalizes_naive_timestamps_and_maps_columns():
     naive_created = datetime(2026, 1, 1)  # what oracledb actually returns
@@ -160,7 +160,7 @@ def test_load_issue_states_normalizes_naive_timestamps_and_maps_columns():
     states = history_repo.load_issue_states(conn, [500])
     state = states[500]
 
-    assert state["created_at"] == datetime(2026, 1, 1, tzinfo=timezone.utc)
+    assert state["created_at"] == datetime(2026, 1, 1, tzinfo=KST)
     assert state["created_at"].tzinfo is not None
 
     cv = state["current_values"]
@@ -184,7 +184,7 @@ def test_load_changes_normalizes_naive_timestamps_and_maps_columns_positionally(
     changes = history_repo.load_changes(conn, [500])
     item = changes[500][0]
 
-    assert item.changed_at == datetime(2026, 1, 5, tzinfo=timezone.utc)
+    assert item.changed_at == datetime(2026, 1, 5, tzinfo=KST)
     assert item.changed_at.tzinfo is not None
     assert item.history_id == "h1"
     assert item.item_seq == 0

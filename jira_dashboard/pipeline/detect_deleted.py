@@ -14,7 +14,7 @@ WHERE  project_id = :project_id AND deleted_at IS NULL
 
 MARK_DELETED = """
 UPDATE test_jira_issue
-SET    deleted_at = SYS_EXTRACT_UTC(SYSTIMESTAMP), delete_reason = :reason
+SET    deleted_at = (SYS_EXTRACT_UTC(SYSTIMESTAMP) + INTERVAL '9' HOUR), delete_reason = :reason
 WHERE  issue_id = :issue_id
 """
 

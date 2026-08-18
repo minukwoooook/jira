@@ -1,25 +1,26 @@
 import logging
-from datetime import datetime, timezone
+from datetime import datetime
 
 from jira_dashboard.jira.models import (
-    MAX_CHANGELOG_ID_BYTES, MAX_CHANGELOG_STR_BYTES, MAX_NAME_BYTES, ChangelogItem,
+    KST, MAX_CHANGELOG_ID_BYTES, MAX_CHANGELOG_STR_BYTES, MAX_NAME_BYTES,
+    ChangelogItem,
 )
 from jira_dashboard.jira.parser import truncate
 
 log = logging.getLogger(__name__)
 
 
-def as_utc(dt: datetime | None) -> datetime | None:
+def as_kst(dt: datetime | None) -> datetime | None:
     """Oracle 19c의 plain TIMESTAMP 컬럼은 오프셋 없는(naive) datetime으로 돌아온다.
 
-    이 파이프라인의 모든 타임스탬프는 UTC로 저장된다는 규약이므로(spec §2.1),
-    읽을 때 UTC로 못박는다. 안 하면 build_intervals가 SENTINEL(UTC-aware)과
+    이 파이프라인의 모든 타임스탬프는 KST로 저장된다는 규약이므로(spec §2.1),
+    읽을 때 KST로 못박는다. 안 하면 build_intervals가 SENTINEL(KST-aware)과
     naive datetime을 `<`로 비교하다 TypeError로 죽는다 — changelog가 있는
     첫 이슈에서 곧바로 재현된다.
     """
     if dt is None or dt.tzinfo is not None:
         return dt
-    return dt.replace(tzinfo=timezone.utc)
+    return dt.replace(tzinfo=KST)
 
 _MERGE_CHANGELOG = """
 MERGE INTO test_issue_changelog t
@@ -211,7 +212,7 @@ def load_issue_states(conn, issue_ids: list[int]) -> dict[int, dict]:
          assignee_key, assignee_name, reporter_key, reporter_name,
          parent) in cur.fetchall():
         states[iid] = {
-            "created_at": as_utc(created),
+            "created_at": as_kst(created),
             "current_values": {
                 "issuetype": (issue_type, None),
                 "status": (status, None),
@@ -254,7 +255,7 @@ def load_changes(conn, issue_ids: list[int]) -> dict[int, list[ChangelogItem]]:
          from_id, from_str, to_id, to_str) in cur.fetchall():
         out.setdefault(iid, []).append(ChangelogItem(
             history_id=hid, item_seq=seq, author_user_key=None,
-            author_display_name=None, changed_at=as_utc(at), field_name=field_name,
+            author_display_name=None, changed_at=as_kst(at), field_name=field_name,
             field_id=field_id, from_id=from_id, from_str=from_str,
             to_id=to_id, to_str=to_str,
         ))

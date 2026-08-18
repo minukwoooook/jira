@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from jira_dashboard.db.repository.history import as_utc
+from jira_dashboard.db.repository.history import as_kst
 from jira_dashboard.jira.models import MAX_ERROR_MSG_BYTES
 from jira_dashboard.jira.parser import truncate
 
@@ -15,10 +15,10 @@ USING (SELECT :project_id AS project_id FROM dual) s
 ON (t.project_id = s.project_id)
 WHEN MATCHED THEN UPDATE SET
   t.last_synced_updated_at = NVL(:since, t.last_synced_updated_at),
-  t.last_run_at = SYS_EXTRACT_UTC(SYSTIMESTAMP), t.last_status = :last_status
+  t.last_run_at = (SYS_EXTRACT_UTC(SYSTIMESTAMP) + INTERVAL '9' HOUR), t.last_status = :last_status
 WHEN NOT MATCHED THEN
   INSERT (project_id, last_synced_updated_at, last_run_at, last_status)
-  VALUES (:project_id, :since, SYS_EXTRACT_UTC(SYSTIMESTAMP), :last_status)
+  VALUES (:project_id, :since, (SYS_EXTRACT_UTC(SYSTIMESTAMP) + INTERVAL '9' HOUR), :last_status)
 """
 
 _MERGE_REQUEST_RESYNC = """
@@ -41,7 +41,7 @@ VALUES (:instance_id, :project_id, :step) RETURNING run_id INTO :out_run_id
 
 _FINISH_RUN = """
 UPDATE test_sync_run
-SET    finished_at = SYS_EXTRACT_UTC(SYSTIMESTAMP), status = :status,
+SET    finished_at = (SYS_EXTRACT_UTC(SYSTIMESTAMP) + INTERVAL '9' HOUR), status = :status,
        issues_fetched = :issues_fetched, issues_upserted = :issues_upserted,
        error_msg = :error_msg
 WHERE  run_id = :run_id
@@ -49,10 +49,10 @@ WHERE  run_id = :run_id
 
 _RECLAIM_RUNS = """
 UPDATE test_sync_run
-SET    status = 'FAILED', finished_at = SYS_EXTRACT_UTC(SYSTIMESTAMP),
+SET    status = 'FAILED', finished_at = (SYS_EXTRACT_UTC(SYSTIMESTAMP) + INTERVAL '9' HOUR),
        error_msg = 'reclaimed: process died while RUNNING'
 WHERE  status = 'RUNNING'
-AND    started_at < SYS_EXTRACT_UTC(SYSTIMESTAMP) - NUMTODSINTERVAL(:hours, 'HOUR')
+AND    started_at < (SYS_EXTRACT_UTC(SYSTIMESTAMP) + INTERVAL '9' HOUR) - NUMTODSINTERVAL(:hours, 'HOUR')
 """
 
 _RECLAIM_WATERMARKS = """
@@ -71,7 +71,7 @@ def read_watermark(conn, project_id: int) -> tuple[datetime | None, bool]:
     # Item 9: 여기가 정규화되지 않은 유일한 타임스탬프 읽기 경로였다. 지금은 since가
     # strftime에만 닿아서 안전했을 뿐이고, 비교나 산술에 닿는 순간 naive/aware
     # TypeError가 난다 (R20이 정확히 그 방식으로 터졌다).
-    return (None if full == "Y" else as_utc(since)), full == "Y"
+    return (None if full == "Y" else as_kst(since)), full == "Y"
 
 
 def write_watermark(conn, project_id: int, since: datetime | None, status: str) -> None:

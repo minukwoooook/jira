@@ -40,7 +40,10 @@ DISPLAY_TZ=Asia/Seoul
 JIRA_SITE_A_TOKEN=<실제 PAT>
 ```
 
-`DISPLAY_TZ`는 차트의 날짜 경계에만 쓰인다. DB에는 모든 시각이 UTC로 저장된다.
+DB에는 모든 시각이 KST(Asia/Seoul, 고정 +09:00)로 저장된다(design.md §2.1). `DISPLAY_TZ`는
+아직 구현되지 않은 쿼리 API(6장, 이번 범위 밖)가 붙였을 때 저장 타임존과 다른 타임존으로
+차트 날짜 경계를 보여주고 싶을 경우에만 쓰인다 — 기본값 `Asia/Seoul`은 저장 타임존과 같으므로
+지금은 사실상 no-op이다.
 
 ---
 
@@ -162,6 +165,13 @@ python -m jira_dashboard.cli doctor --jira --instance SITE_A --project TEST
 
 **FAIL이 있으면 사외로 돌아가 고치고 다시 반입한다.** 사내에서 즉석으로 고치면 사외
 테스트와 어긋나고, 반입이 단방향이라 되돌리기 어렵다.
+
+**A13 (자동 검사 아님, 수동 확인 필요) — Jira의 기본 타임존이 `Asia/Seoul`인지.**
+증분 수집은 워터마크를 KST 벽시계 문자열로 JQL에 박아 넣는다(`sync_issues.build_jql`).
+JQL의 오프셋 없는 날짜 리터럴은 **Jira 서버에 설정된 기본 타임존**으로 해석되므로, 이
+가정이 틀리면 다음 배치가 데이터를 놓치거나 중복 수집한다. Jira 관리자 화면(시스템 →
+일반 설정 → 기본 사용자 시간대)에서 `Asia/Seoul`(또는 KST와 동일한 오프셋)인지 확인할 것 —
+다르면 `build_jql`이 오프셋을 명시하도록 코드를 고쳐야 한다(사외로 돌아가 수정).
 
 ---
 

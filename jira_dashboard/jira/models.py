@@ -1,7 +1,11 @@
 from dataclasses import dataclass
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 
-SENTINEL = datetime(9999, 12, 31, tzinfo=timezone.utc)
+# 한국은 DST가 없어 KST는 항상 고정 +9시간이다 (spec §2.1). IANA tzdata 조회 없이
+# 고정 오프셋으로 표현해 zoneinfo 의존성을 만들지 않는다.
+KST = timezone(timedelta(hours=9))
+
+SENTINEL = datetime(9999, 12, 31, tzinfo=KST)
 
 # 컬럼 폭 상한. 값은 DDL에서 선언한 BYTE 폭과 같아야 하며, 그 일치는
 # tests/static/test_column_widths.py가 schema_map.column_byte_limits로 대조한다 —

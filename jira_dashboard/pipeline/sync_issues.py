@@ -1,18 +1,19 @@
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 
 from jira_dashboard.db.repository import history as history_repo
 from jira_dashboard.db.repository import issue as issue_repo
 from jira_dashboard.db.repository.catalog import (
     field_pk_by_field_id, field_pk_by_field_name,
 )
+from jira_dashboard.jira.models import KST
 from jira_dashboard.jira.parser import parse_field_defs, parse_issue
 from jira_dashboard.jira.protocol import JiraClient
 
 log = logging.getLogger(__name__)
 
-EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
+EPOCH = datetime(1970, 1, 1, tzinfo=KST)
 OVERLAP = timedelta(minutes=5)
 
 
@@ -29,7 +30,13 @@ class SyncResult:
 
 def build_jql(project_key: str, since: datetime | None) -> str:
     """프로젝트 키를 따옴표로 감싼다. Jira의 키 문자집합(대문자+숫자)에서는 없어도
-    되지만, 식별자를 인용 없이 문장에 끼워 넣는 습관 자체를 남기지 않는다."""
+    되지만, 식별자를 인용 없이 문장에 끼워 넣는 습관 자체를 남기지 않는다.
+
+    JQL의 오프셋 없는 날짜/시각 리터럴은 Jira 서버에 설정된 기본 타임존으로
+    해석된다 — 여기 찍히는 문자열은 KST 벽시계 값이므로, 이는 Jira 인스턴스의
+    기본 타임존이 Asia/Seoul일 때만 올바르다 (spec §2.1, A3처럼 사내 확인이
+    필요한 전제 — docs/api-verification.md A13, 자동 검사는 아니고 관리자 화면에서
+    육안 확인한다)."""
     start = (since or EPOCH).strftime("%Y-%m-%d %H:%M")
     return (f'project = "{project_key}" AND updated >= "{start}" '
             "ORDER BY updated ASC")

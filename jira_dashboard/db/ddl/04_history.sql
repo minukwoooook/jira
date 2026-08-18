@@ -5,7 +5,7 @@ CREATE TABLE test_issue_changelog (
   item_seq            NUMBER(4)           DEFAULT 0 NOT NULL,
   author_user_key     VARCHAR2(255 BYTE),
   author_display_name VARCHAR2(255 BYTE),
-  changed_at          TIMESTAMP           NOT NULL,   -- UTC
+  changed_at          TIMESTAMP           NOT NULL,   -- KST
   field_pk            NUMBER(10),                     -- 카탈로그에 없는 필드면 NULL
   field_name          VARCHAR2(255 BYTE)  NOT NULL,   -- changelog 원본 field 문자열
   from_id             VARCHAR2(255 BYTE),
@@ -24,7 +24,7 @@ CREATE INDEX test_ix_changelog_field ON test_issue_changelog (field_pk, changed_
 CREATE TABLE test_issue_field_history (
   issue_id   NUMBER(12)          NOT NULL,
   field_pk   NUMBER(10)          NOT NULL,
-  valid_from TIMESTAMP           NOT NULL,   -- UTC, 경계 포함
+  valid_from TIMESTAMP           NOT NULL,   -- KST, 경계 포함
   valid_to   TIMESTAMP           DEFAULT TIMESTAMP '9999-12-31 00:00:00' NOT NULL,
   val_str    VARCHAR2(1000 BYTE),
   val_id     VARCHAR2(100 BYTE),

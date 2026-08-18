@@ -11,7 +11,7 @@ MERGE INTO test_jira_instance t
 USING (SELECT :instance_key AS instance_key FROM dual) s
 ON (t.instance_key = s.instance_key)
 WHEN MATCHED THEN UPDATE SET t.base_url = :base_url, t.auth_type = :auth_type,
-     t.secret_ref = :secret_ref, t.updated_at = SYS_EXTRACT_UTC(SYSTIMESTAMP)
+     t.secret_ref = :secret_ref, t.updated_at = (SYS_EXTRACT_UTC(SYSTIMESTAMP) + INTERVAL '9' HOUR)
 WHEN NOT MATCHED THEN
   INSERT (instance_key, base_url, auth_type, secret_ref)
   VALUES (:instance_key, :base_url, :auth_type, :secret_ref)
@@ -43,7 +43,7 @@ USING (SELECT :instance_id AS instance_id,
               :jira_project_id AS jira_project_id FROM dual) s
 ON (t.instance_id = s.instance_id AND t.jira_project_id = s.jira_project_id)
 WHEN MATCHED THEN UPDATE SET t.project_key = :project_key, t.name = :name,
-     t.updated_at = SYS_EXTRACT_UTC(SYSTIMESTAMP)
+     t.updated_at = (SYS_EXTRACT_UTC(SYSTIMESTAMP) + INTERVAL '9' HOUR)
 WHEN NOT MATCHED THEN
   INSERT (instance_id, jira_project_id, project_key, name)
   VALUES (:instance_id, :jira_project_id, :project_key, :name)
@@ -87,7 +87,7 @@ WHEN MATCHED THEN UPDATE SET
   t.value_kind = :value_kind, t.storage_kind = :storage_kind,
   t.column_name = :column_name, t.label_column_name = :label_column_name,
   t.is_dimension = :is_dimension, t.is_measure = :is_measure,
-  t.last_seen_at = SYS_EXTRACT_UTC(SYSTIMESTAMP)
+  t.last_seen_at = (SYS_EXTRACT_UTC(SYSTIMESTAMP) + INTERVAL '9' HOUR)
 WHEN NOT MATCHED THEN
   INSERT (instance_id, field_id, field_name, is_custom, schema_type, schema_items,
           custom_type, value_kind, storage_kind, column_name, label_column_name,

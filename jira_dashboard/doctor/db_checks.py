@@ -19,11 +19,11 @@ DDL에서 만든 딕셔너리 응답을 먹여 이름·폭·인덱스·제약·�
 확인한다 (R33).
 """
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 
 from jira_dashboard.db import schema_map
-from jira_dashboard.jira.models import SENTINEL
+from jira_dashboard.jira.models import KST, SENTINEL
 
 DDL_DIR = Path(__file__).parents[1] / "db" / "ddl"
 # data_length를 바이트 폭으로 읽어도 되는 타입 (spec §2.2는 전부 BYTE 선언이다)
@@ -56,9 +56,9 @@ SELECT sequence_name FROM user_sequences
 WHERE  sequence_name LIKE 'TEST\\_%' ESCAPE '\\'
 """
 
-# DB8: 알려진 UTC 시각. 자정/자정 언저리가 아닌 시각을 골라 오프셋 변환 버그가
+# DB8: 알려진 KST 시각. 자정/자정 언저리가 아닌 시각을 골라 오프셋 변환 버그가
 # 자정 근처 우연한 일치로 숨는 것을 막는다.
-_PROBE_INSTANT = datetime(2020, 3, 4, 5, 6, 7, tzinfo=timezone.utc)
+_PROBE_INSTANT = datetime(2020, 3, 4, 5, 6, 7, tzinfo=KST)
 _ROUNDTRIP_SQL = """
 SELECT :probe_ts AS roundtrip_probe,
        :sentinel_ts AS roundtrip_sentinel,
@@ -140,7 +140,7 @@ def _schema_problems(conn) -> tuple[list[str], dict[str, int]]:
 
 
 def _check_timestamp_roundtrip(conn) -> CheckResult:
-    """DB8: aware UTC datetime을 naive TIMESTAMP 컬럼에 바인드했을 때 oracledb가
+    """DB8: aware KST datetime을 naive TIMESTAMP 컬럼에 바인드했을 때 oracledb가
     오프셋을 잘라내는지(맞음) 아니면 세션/로컬 타임존으로 변환해버리는지(틀리면
     모든 타임스탬프가 조용히 밀린다)를 실측한다. 동시에 valid_to DEFAULT로 쓰는
     SQL 리터럴 `TIMESTAMP '9999-12-31 00:00:00'`과 바인드한 SENTINEL이 같은 값으로
@@ -152,7 +152,7 @@ def _check_timestamp_roundtrip(conn) -> CheckResult:
         "oracledb가 aware datetime을 세션 타임존으로 변환한 뒤 자르고 있다는 뜻이다 "
         "— 저장된 모든 타임스탬프가 오프셋만큼 밀려 있다. 바인드 전에 tzinfo를 "
         "벗기거나 cursor.setinputsizes(oracledb.DB_TYPE_TIMESTAMP)로 명시할 것 "
-        "(spec §2.1, jira_dashboard/db/repository/history.py의 as_utc와 짝을 "
+        "(spec §2.1, jira_dashboard/db/repository/history.py의 as_kst와 짝을 "
         "이루는 쓰기측 규약이 없다는 뜻이므로 만들어야 한다)"
     )
     if row is None:
@@ -162,16 +162,16 @@ def _check_timestamp_roundtrip(conn) -> CheckResult:
             impact,
         )
     probe_back, sentinel_back, literal_back = row
-    probe_utc = (probe_back.replace(tzinfo=timezone.utc)
+    probe_kst = (probe_back.replace(tzinfo=KST)
                 if probe_back.tzinfo is None else probe_back)
-    probe_ok = probe_utc == _PROBE_INSTANT
+    probe_ok = probe_kst == _PROBE_INSTANT
     # 리터럴과 바인드한 SENTINEL은 재해석 없이 그대로(둘 다 naive) 비교한다 —
     # 이게 바로 DDL DEFAULT와 애플리케이션이 바인드하는 값이 실제로 같은 순간을
     # 가리키는지를 보는 지점이다.
     sentinel_ok = sentinel_back == literal_back
     verdict = "PASS" if (probe_ok and sentinel_ok) else "FAIL"
     observed = (
-        f"probe bound={_PROBE_INSTANT.isoformat()} roundtrip(as UTC)={probe_utc.isoformat()} "
+        f"probe bound={_PROBE_INSTANT.isoformat()} roundtrip(as KST)={probe_kst.isoformat()} "
         f"match={probe_ok}; sentinel roundtrip={sentinel_back} "
         f"literal(valid_to DEFAULT)={literal_back} match={sentinel_ok}"
     )

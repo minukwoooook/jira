@@ -1,21 +1,23 @@
 import json
 from collections.abc import Mapping
-from datetime import date, datetime, timezone
+from datetime import date, datetime
 
 from jira_dashboard.jira.fieldmap import SYSTEM_FIELD_MAP
 from jira_dashboard.jira.models import (
-    MAX_NAME_BYTES, MAX_SHORT_NAME_BYTES, MAX_SUMMARY_BYTES, MAX_VAL_ID_BYTES,
-    MAX_VAL_STR_BYTES, ChangelogItem, FieldDef, FieldValue, ParsedIssue,
+    KST, MAX_NAME_BYTES, MAX_SHORT_NAME_BYTES, MAX_SUMMARY_BYTES,
+    MAX_VAL_ID_BYTES, MAX_VAL_STR_BYTES, ChangelogItem, FieldDef, FieldValue,
+    ParsedIssue,
 )
 
 _VALUE_TYPES = {"option", "option-with-child"}
 _NAME_TYPES = {"priority", "status", "resolution", "issuetype", "version", "component"}
 
 
-def to_utc(text: str | None) -> datetime | None:
+def to_kst(text: str | None) -> datetime | None:
+    """Jira의 ISO8601 오프셋 시각을 KST(고정 +09:00)로 변환한다 (spec §2.1)."""
     if not text:
         return None
-    return datetime.fromisoformat(text).astimezone(timezone.utc)
+    return datetime.fromisoformat(text).astimezone(KST)
 
 
 def to_date(text: str | None) -> date | None:
@@ -57,9 +59,9 @@ def _scalar(field_id: str, seq: int, fd: FieldDef, raw) -> FieldValue | None:
     if t == "date":
         d = to_date(raw)
         return FieldValue(field_id, seq, None, None,
-                          datetime(d.year, d.month, d.day, tzinfo=timezone.utc), None)
+                          datetime(d.year, d.month, d.day, tzinfo=KST), None)
     if t == "datetime":
-        return FieldValue(field_id, seq, None, None, to_utc(raw), None)
+        return FieldValue(field_id, seq, None, None, to_kst(raw), None)
     if isinstance(raw, dict):
         # val_id도 잘라야 한다 — TEST_ISSUE_FIELD_VALUE.val_id는 VARCHAR2(100 BYTE)다.
         # R22가 TEST_ISSUE_FIELD_HISTORY의 같은 폭 컬럼을 고칠 때 이 형제를 놓쳤다.
@@ -102,7 +104,7 @@ def parse_changelog(raw_histories: list[dict]) -> list[ChangelogItem]:
     out = []
     for h in raw_histories:
         author = h.get("author") or {}
-        changed_at = to_utc(h["created"])
+        changed_at = to_kst(h["created"])
         for seq, item in enumerate(h.get("items") or []):
             out.append(ChangelogItem(
                 history_id=str(h["id"]),
@@ -179,9 +181,9 @@ def parse_issue(
         # 255자로 제한한다는 전제 덕분에 우연히 안전했을 뿐, 다른 곳은 전부 바이트
         # 기준인데 여기만 문자 기준이었다 (한글 1000자 = 3000바이트).
         summary=truncate(f.get("summary"), MAX_SUMMARY_BYTES) or None,
-        created_at=to_utc(f["created"]),
-        updated_at=to_utc(f["updated"]),
-        resolved_at=to_utc(f.get("resolutiondate")),
+        created_at=to_kst(f["created"]),
+        updated_at=to_kst(f["updated"]),
+        resolved_at=to_kst(f.get("resolutiondate")),
         due_date=to_date(f.get("duedate")),
         original_estimate_sec=f.get("timeoriginalestimate"),
         remaining_estimate_sec=f.get("timeestimate"),

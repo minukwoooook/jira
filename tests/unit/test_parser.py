@@ -1,7 +1,7 @@
-from datetime import datetime, timezone
+from datetime import datetime
 
 from jira_dashboard.jira.fieldmap import SYSTEM_FIELD_MAP, SystemFieldSpec, value_kind_of
-from jira_dashboard.jira.models import FieldDef
+from jira_dashboard.jira.models import KST, FieldDef
 from jira_dashboard.jira import parser
 
 
@@ -9,14 +9,14 @@ def _fd(field_id, schema_type, items=None, custom=None):
     return FieldDef(field_id, "F", True, schema_type, items, custom)
 
 
-def test_to_utc_converts_offset_to_utc():
-    assert parser.to_utc("2026-05-01T09:00:00.000+0900") == datetime(
-        2026, 5, 1, 0, 0, tzinfo=timezone.utc
+def test_to_kst_converts_offset_to_kst():
+    assert parser.to_kst("2026-05-01T00:00:00.000+0000") == datetime(
+        2026, 5, 1, 9, 0, tzinfo=KST
     )
 
 
-def test_to_utc_handles_none():
-    assert parser.to_utc(None) is None
+def test_to_kst_handles_none():
+    assert parser.to_kst(None) is None
 
 
 def test_string_value_is_stripped():
@@ -34,16 +34,16 @@ def test_number_value():
     assert (vals[0].val_num, vals[0].val_str) == (3.5, None)
 
 
-def test_date_value_is_midnight_utc():
+def test_date_value_is_midnight_kst():
     vals = parser.extract_values("customfield_3", _fd("customfield_3", "date"), "2026-05-01")
-    assert vals[0].val_date == datetime(2026, 5, 1, 0, 0, tzinfo=timezone.utc)
+    assert vals[0].val_date == datetime(2026, 5, 1, 0, 0, tzinfo=KST)
 
 
-def test_datetime_value_is_converted_to_utc():
+def test_datetime_value_is_converted_to_kst():
     vals = parser.extract_values(
         "customfield_3", _fd("customfield_3", "datetime"), "2026-05-01T09:00:00.000+0900"
     )
-    assert vals[0].val_date == datetime(2026, 5, 1, 0, 0, tzinfo=timezone.utc)
+    assert vals[0].val_date == datetime(2026, 5, 1, 9, 0, tzinfo=KST)
 
 
 def test_option_keeps_id_and_value():

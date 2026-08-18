@@ -38,7 +38,7 @@ WHEN MATCHED THEN UPDATE SET
   t.original_estimate_sec = :original_estimate_sec,
   t.remaining_estimate_sec = :remaining_estimate_sec,
   t.time_spent_sec = :time_spent_sec,
-  t.synced_at = SYS_EXTRACT_UTC(SYSTIMESTAMP),
+  t.synced_at = (SYS_EXTRACT_UTC(SYSTIMESTAMP) + INTERVAL '9' HOUR),
   t.deleted_at = NULL, t.delete_reason = NULL
 WHEN NOT MATCHED THEN
   INSERT (issue_id, instance_id, project_id, jira_issue_id, issue_key,
@@ -56,7 +56,7 @@ WHEN NOT MATCHED THEN
 """
 
 _TOUCH_SYNCED = """
-UPDATE test_jira_issue SET synced_at = SYS_EXTRACT_UTC(SYSTIMESTAMP)
+UPDATE test_jira_issue SET synced_at = (SYS_EXTRACT_UTC(SYSTIMESTAMP) + INTERVAL '9' HOUR)
 WHERE  issue_id = :issue_id
 """
 
@@ -66,7 +66,7 @@ USING (SELECT :issue_id AS issue_id FROM dual) s
 ON (t.issue_id = s.issue_id)
 WHEN MATCHED THEN UPDATE SET t.payload = :payload,
      t.payload_hash = :payload_hash,
-     t.fetched_at = SYS_EXTRACT_UTC(SYSTIMESTAMP)
+     t.fetched_at = (SYS_EXTRACT_UTC(SYSTIMESTAMP) + INTERVAL '9' HOUR)
 WHEN NOT MATCHED THEN INSERT (issue_id, payload, payload_hash)
                       VALUES (:issue_id, :payload, :payload_hash)
 """

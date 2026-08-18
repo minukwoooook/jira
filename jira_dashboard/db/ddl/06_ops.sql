@@ -1,6 +1,6 @@
 CREATE TABLE test_sync_watermark (
   project_id             NUMBER(10)        NOT NULL,
-  last_synced_updated_at TIMESTAMP,                    -- UTC
+  last_synced_updated_at TIMESTAMP,                    -- KST
   last_run_at            TIMESTAMP,
   last_status            VARCHAR2(20 BYTE),
   full_resync_requested  CHAR(1 BYTE) DEFAULT 'N' NOT NULL,
@@ -16,7 +16,7 @@ CREATE TABLE test_sync_run (
   instance_id     NUMBER(10)         NOT NULL,
   project_id      NUMBER(10),                     -- 카탈로그 동기화는 NULL
   step            VARCHAR2(30 BYTE)  NOT NULL,
-  started_at      TIMESTAMP          DEFAULT SYS_EXTRACT_UTC(SYSTIMESTAMP) NOT NULL,
+  started_at      TIMESTAMP          DEFAULT (SYS_EXTRACT_UTC(SYSTIMESTAMP) + INTERVAL '9' HOUR) NOT NULL,
   finished_at     TIMESTAMP,
   status          VARCHAR2(20 BYTE)  DEFAULT 'RUNNING' NOT NULL,
   issues_fetched  NUMBER(10)         DEFAULT 0 NOT NULL,

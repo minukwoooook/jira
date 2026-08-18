@@ -18,15 +18,15 @@ CREATE TABLE test_jira_issue (
   reporter_display_name  VARCHAR2(255 BYTE),
   parent_key             VARCHAR2(50 BYTE),
   summary                VARCHAR2(1024 BYTE),
-  created_at             TIMESTAMP           NOT NULL,   -- UTC
-  updated_at             TIMESTAMP           NOT NULL,   -- UTC, 동기화 워터마크 기준
-  resolved_at            TIMESTAMP,                      -- UTC
+  created_at             TIMESTAMP           NOT NULL,   -- KST
+  updated_at             TIMESTAMP           NOT NULL,   -- KST, 동기화 워터마크 기준
+  resolved_at            TIMESTAMP,                      -- KST
   due_date               DATE,                           -- Jira duedate는 날짜만
   first_done_at          TIMESTAMP,                      -- ★ 3.3.2 참고, 파생
   original_estimate_sec  NUMBER(12),
   remaining_estimate_sec NUMBER(12),
   time_spent_sec         NUMBER(12),
-  synced_at              TIMESTAMP DEFAULT SYS_EXTRACT_UTC(SYSTIMESTAMP) NOT NULL,
+  synced_at              TIMESTAMP DEFAULT (SYS_EXTRACT_UTC(SYSTIMESTAMP) + INTERVAL '9' HOUR) NOT NULL,
   deleted_at             TIMESTAMP,
   delete_reason          VARCHAR2(20 BYTE),              -- ★ 3.3.4 참고
   CONSTRAINT test_pk_jira_issue      PRIMARY KEY (issue_id),
@@ -56,7 +56,7 @@ CREATE TABLE test_issue_field_value (
   val_seq  NUMBER(4)           DEFAULT 0 NOT NULL,   -- 다중값 필드의 순번
   val_str  VARCHAR2(1000 BYTE),
   val_num  NUMBER,
-  val_date TIMESTAMP,                                 -- UTC
+  val_date TIMESTAMP,                                 -- KST
   val_id   VARCHAR2(100 BYTE),                        -- 옵션/사용자의 원본 ID
   CONSTRAINT test_pk_ifv       PRIMARY KEY (issue_id, field_pk, val_seq),
   CONSTRAINT test_fk_ifv_issue FOREIGN KEY (issue_id) REFERENCES test_jira_issue (issue_id),
