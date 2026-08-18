@@ -36,7 +36,7 @@
 | 값 레벨 매핑 | 테이블만 만들고 1단계에서는 비워둠 |
 | Oracle | **19c 확정.** 전용 스키마, DDL 자유 (2.4절 참고) |
 | 사용자/권한 | 없음 (사내 공개) |
-| 언어/라이브러리 | Python 3.12, `oracledb` (thin 모드) |
+| 언어/라이브러리 | Python 3.12, `oracledb` (thick 모드, Oracle Instant Client 필요 — 5.7절) |
 | 개발 환경 | 사외. **Oracle과 Jira 모두 없다.** DDL은 사내에서 사람이 실행하고, 코드는 테이블이 존재한다고 가정한다 |
 | 반입 경로 | 사내 Git **단방향**. 의존성은 오프라인 wheel 번들 동봉 |
 | DB 객체 명명 | 전부 **`TEST_` 접두사** — 일괄 삭제 후 재생성 (2.3절) |
@@ -1188,7 +1188,16 @@ MERGE에 넣어둔다.**
 
 ### 5.7 oracledb 사용 지침
 
-- **thin 모드 기본** — Instant Client 설치가 필요 없다. Kerberos 등이 필요할 때만 thick 검토
+- **thick 모드 필수.** thin 모드(순수 Python 프로토콜 구현)는 12c 이전 스타일 비밀번호
+  검증자를 이해하지 못해 `DPY-3015`로 접속 자체가 실패한다 — 사내 Oracle 계정이 이 구형
+  검증자를 쓰는 것이 실측으로 확인됐다(사내에서 항상 thick 모드를 써온 선례와 일치).
+  그래서 `db/pool.py`의 `get_pool()`이 `oracledb.create_pool` 이전에
+  `oracledb.init_oracle_client(lib_dir=...)`를 (프로세스당 정확히 한 번, `get_pool`이
+  `lru_cache(maxsize=1)`이므로) 호출한다. `lib_dir`은 `ORACLE_CLIENT_LIB_DIR` 환경변수 —
+  Instant Client가 시스템 라이브러리 경로(`ldconfig`/`LD_LIBRARY_PATH`)에 이미 있으면
+  비워둬도 된다(`lib_dir=None`이면 oracledb가 기본 검색 경로를 쓴다).
+  **결과적으로 Instant Client 설치가 배포 전제 조건이 됐다** — 11.4절의 오프라인 반입
+  전략에 영향을 준다(Instant Client는 pip wheel이 아니라 별도 반입 대상이다)
 - `oracledb.create_pool(min=2, max=8)` 커넥션 풀
 - `cursor.executemany(..., batcherrors=False)` — 격리 단위는 행이 아니라 **프로젝트**다.
   한 프로젝트의 배치 안에서 행 하나가 실패하면 그 배치 전체를 실패시켜 예외로 드러낸다.
@@ -1938,8 +1947,15 @@ pip install --no-index --find-links vendor/ -r requirements-dev.txt
 `pytest`를 요구하기 때문이고, `pytest`가 빠진 번들로는 7단계를 아예 실행할 수 없다.
 이 두 가지(추적 여부, pytest 포함 여부)는 `tests/static/test_offline_bundle.py`가 검사한다.
 
-**`oracledb`를 thin 모드로 고른 것이 여기서 값을 한다** — 순수 Python이라 Instant Client
-설치나 네이티브 컴파일이 필요 없다. 반입 대상이 wheel 몇 개로 끝난다.
+**`oracledb`가 thick 모드로 바뀌면서(5.7절, `DPY-3015` 회피) 이 계산이 더 이상 성립하지
+않는다.** `vendor/`의 wheel 몇 개로 반입이 끝나는 건 thin 모드였을 때 얘기다. thick 모드는
+Oracle Instant Client(네이티브 공유 라이브러리, pip wheel이 아니다)가 대상 서버에 있어야
+하는데, 이 프로젝트가 "사내에서 항상 thick 모드를 써왔다"는 선례를 근거로 삼고 있으므로
+**Instant Client는 이미 사내 서버에 설치돼 있다고 전제한다** — 다른 사내 시스템도 같은
+전제로 돌고 있었기 때문이다. 이 전제가 틀렸다면(신규 서버라 Instant Client가 없다면)
+Instant Client 배포판(zip/rpm)도 git 저장소에 반입 대상으로 추가해야 한다 — wheel처럼
+`pip install`로 끝나지 않으므로 별도 절차가 필요하고, 이번 설계 범위에는 없다
+(온프렘 런북 0단계에서 사람이 먼저 확인할 항목으로 남겨둔다).
 
 의존성을 최소로 유지한다: 런타임은 `oracledb`, `httpx`, `pydantic-settings`뿐이고
 테스트는 `pytest` 하나다 (`pytest-asyncio`는 쓰지 않는다 — 비동기 코드가 없다).

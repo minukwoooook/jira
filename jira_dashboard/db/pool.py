@@ -12,7 +12,14 @@ log = logging.getLogger(__name__)
 
 @lru_cache(maxsize=1)
 def get_pool() -> oracledb.ConnectionPool:
+    """thick 모드로 연결한다. 사내 계정의 비밀번호 검증자가 thin 모드(python-oracledb의
+    순수 파이썬 프로토콜 구현)가 이해하는 12c 이후 포맷이 아니면 DPY-3015로 죽는다 —
+    thin이 처음부터 실패하고 있었으므로 이건 폴백이 아니라 유일하게 동작하는 경로다.
+    init_oracle_client는 프로세스당 한 번만 호출할 수 있는데, get_pool은
+    lru_cache(maxsize=1)로 정확히 한 번만 실행되므로 여기서 부르는 것으로 충분하다.
+    """
     s = get_settings()
+    oracledb.init_oracle_client(lib_dir=s.oracle_client_lib_dir)
     return oracledb.create_pool(
         user=s.oracle_user, password=s.oracle_password, dsn=s.oracle_dsn,
         min=s.pool_min, max=s.pool_max, increment=1,

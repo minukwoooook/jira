@@ -18,6 +18,7 @@
 | Python 3.12 | `python3 --version` |
 | Oracle 19c 접속 정보 | DSN, 전용 스키마 계정/비밀번호 |
 | 스키마 권한 | `CREATE SESSION`, `CREATE TABLE`, `CREATE SEQUENCE`, `CREATE VIEW` + 테이블스페이스 쿼터 |
+| **Oracle Instant Client** | thick 모드 필수(`DPY-3015` 회피, design.md §5.7) — 설치 경로를 알아둔다. 사내 다른 시스템도 thick 모드를 쓰므로 대개 서버에 이미 있다 |
 | Jira PAT | 대상 Jira DC 인스턴스의 Personal Access Token (읽기 권한이면 충분) |
 | SQL 클라이언트 | `sqlplus` 등, DDL 파일을 실행할 수 있는 것 |
 
@@ -36,9 +37,13 @@ cp .env.example .env
 ORACLE_DSN=oracle.internal.example.com:1521/ORCL
 ORACLE_USER=jira_dash
 ORACLE_PASSWORD=<실제 비밀번호>
+ORACLE_CLIENT_LIB_DIR=<Instant Client 설치 경로 — 시스템 라이브러리 경로에 이미 있으면 이 줄을 지운다>
 DISPLAY_TZ=Asia/Seoul
 JIRA_SITE_A_TOKEN=<실제 PAT>
 ```
+
+`ORACLE_CLIENT_LIB_DIR`을 지우면(비워두지 말고 줄 자체를 삭제) `lib_dir=None`으로 넘어가
+oracledb가 시스템 기본 검색 경로(`ldconfig`/`LD_LIBRARY_PATH`)에서 Instant Client를 찾는다.
 
 DB에는 모든 시각이 KST(Asia/Seoul, 고정 +09:00)로 저장된다(design.md §2.1). `DISPLAY_TZ`는
 아직 구현되지 않은 쿼리 API(6장, 이번 범위 밖)가 붙였을 때 저장 타임존과 다른 타임존으로
@@ -72,6 +77,10 @@ python -m jira_dashboard.cli doctor --db --skip-schema
 
 `--skip-schema`는 **아직 테이블이 없기 때문에** 붙인다. 이걸 빼면 스키마 대조가 실패해서,
 정작 버전·권한 신호를 봐야 할 순간에 화면이 혼란해진다.
+
+**이 명령이 검사표를 보여주기도 전에 `DPY-3015`로 죽으면** Instant Client 문제다 —
+`ORACLE_CLIENT_LIB_DIR` 경로 또는 시스템 라이브러리 경로를 확인할 것(문제해결 표 참고).
+연결 자체가 안 되므로 DB1~DB8 중 아무것도 실행되지 않은 상태다.
 
 검사 8종 중 이 단계에서 의미 있는 것:
 
@@ -365,6 +374,8 @@ python -m jira_dashboard.cli sync --instance SITE_A --daily
 | `ORA-12899: value too large` | 컬럼 폭 초과 | 폭은 DDL에서 유도해 검사하지만, 새 경로가 빠졌을 수 있다. 어느 컬럼인지 로그에서 확인 |
 | 수집이 0건인데 성공 | `--base-url`에 context path 누락 | 5단계 URL 확인. `doctor --jira`의 A8/A11이 잡아준다 |
 | 인증 실패 | `--secret-ref`가 가리키는 환경변수 미설정 | `doctor --jira`의 A12가 FAIL로 알려준다 |
+| `DPY-3015: password verifier ... not supported` | 사내 Oracle 계정이 thin 모드가 이해 못하는 구형 비밀번호 검증자를 쓴다 | thick 모드가 기본이라 이미 처리돼 있어야 한다(`db/pool.py`가 `oracledb.init_oracle_client` 호출). Instant Client가 설치돼 있고 `ORACLE_CLIENT_LIB_DIR`(또는 시스템 라이브러리 경로)이 맞는지 확인 |
+| `DPY-4011`/`DPY-6000` 계열, Instant Client를 못 찾음 | Instant Client 미설치 또는 `ORACLE_CLIENT_LIB_DIR` 경로 오류 | Instant Client가 이미 서버에 있는지 먼저 확인(다른 사내 시스템도 thick 모드를 쓰므로 대개 있다). 없으면 사외로 돌아가 Instant Client 반입 방법부터 정한다(design.md §11.4) |
 | 2회차에 행이 늘어남 | 멱등성 깨짐 | **진행 중단.** 어느 테이블이 늘었는지 확인해 사외로 보고 |
 
 ### 스키마를 갈아엎을 때

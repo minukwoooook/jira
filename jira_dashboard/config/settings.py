@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     oracle_dsn: str
     oracle_user: str
     oracle_password: str
+    oracle_client_lib_dir: str | None = None
     display_tz: str = "Asia/Seoul"
     pool_min: int = 2
     pool_max: int = 8
